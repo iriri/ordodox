@@ -11,6 +11,13 @@ const board = `<!DOCTYPE html>
 </head>
 <body>
  <h3>/{{.Board}}/</h3>
+ <form action="/{{.Board}}/submit" method="POST">
+  name: <input type="text" name="name"><br>
+  email: <input type="text" name="email"><br>
+  subject: <input type="text" name="subject"><br>
+  comment: <input type="text" name="comment"><br>
+  <input type="submit" value="submit">
+ </form>
  <ul>
   {{range .Threads -}}
   {{with index . 0 -}}

@@ -8,16 +8,11 @@ import (
 	"github.com/iriri/minimal/flag"
 )
 
-type Board struct {
-	Name  string
-	Title string
-}
+type Board struct{ Name, Title string }
 
 type Opt struct {
-	Db     string
-	Log    string
-	Port   string
-	Boards []Board
+	Db, Log, Port string
+	Boards        []Board
 }
 
 func parseFlags() (*Opt, string) {
@@ -35,9 +30,7 @@ func parseConf(path string) ([]Board, error) {
 	if _, err := os.Stat(path); err != nil {
 		return nil, err
 	}
-	var conf struct {
-		Boards []Board
-	}
+	var conf struct{ Boards []Board }
 	md, err := toml.DecodeFile(path, &conf)
 	if err != nil {
 		panic(err)

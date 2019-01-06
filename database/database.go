@@ -50,7 +50,7 @@ func Init(path_ string, boards_ []config.Board) error {
 			"name TEXT,"+
 			"email TEXT,"+
 			"subject TEXT,"+
-			"body TEXT)", b.Name))
+			"comment TEXT)", b.Name))
 		if err != nil {
 			return err
 		}
@@ -91,7 +91,7 @@ type Post struct {
 	Name    string
 	Email   string
 	Subject string
-	Body    string
+	Comment string
 }
 
 func Board(board string) ([][]Post, error) {
@@ -157,7 +157,7 @@ func Thread(board string, op int64) ([]Post, error) {
 			&post.Name,
 			&post.Email,
 			&post.Subject,
-			&post.Body)
+			&post.Comment)
 		if err != nil {
 			return nil, err
 		}
@@ -191,7 +191,9 @@ func Op(board string, id int64) (int64, error) {
 	return op, err
 }
 
-func Reply(board string, op int64, ip string, name, email, subject, body string) error {
+type Request struct{ Name, Email, Subject, Comment string }
+
+func Submit(board string, op int64, ip string, req *Request) error {
 	sq3, err := validate(board)
 	if err != nil {
 		return err
@@ -215,7 +217,7 @@ func Reply(board string, op int64, ip string, name, email, subject, body string)
 
 	err = sq3.Exec(fmt.Sprintf("INSERT INTO %s_posts VALUES("+
 		"NULL, %d, '%s', datetime('now'), ?, ?, ?, ?)", board, op, ip),
-		name, email, subject, body)
+		req.Name, req.Email, req.Subject, req.Comment)
 	if err != nil {
 		return err
 	}

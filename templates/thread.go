@@ -11,9 +11,16 @@ const thread = `<!DOCTYPE html>
 </head>
 <body>
  <h3>{{.Op}}</h3>
+ <form action="/{{.Board}}/{{.Op}}/reply" method="POST">
+  name: <input type="text" name="name"><br>
+  email: <input type="text" name="email"><br>
+  subject: <input type="text" name="subject"><br>
+  comment: <input type="text" name="comment"><br>
+  <input type="submit" value="reply">
+ </form>
  <ul>
   {{range .Posts -}}
-  <li>{{.Body}}</li>
+  <li>{{.Comment}}</li>
   {{- end}}
  </ul>
 </body>`
