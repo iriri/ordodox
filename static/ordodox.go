@@ -1,4 +1,4 @@
-package templates
+package static
 
 var ordodox = []byte(`html {
  background-color: #fafafa;

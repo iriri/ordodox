@@ -20,7 +20,7 @@ func parseFlags() (*Opt, string) {
 	var path string
 	flag.String(&opt.Db, 'd', "", "ordodox.db", "db file")
 	flag.String(&opt.Log, 'l', "", "ordodox.log", "log file")
-	flag.String(&opt.Port, 'p', "", ":8080", "listen port")
+	flag.String(&opt.Port, 'p', "", ":8081", "listen port")
 	flag.String(&path, 'c', "", "ordodox.toml", "config file")
 	flag.Parse(1)
 	return &opt, path

@@ -11,11 +11,12 @@ const board = `<!DOCTYPE html>
 </head>
 <body>
  <h3>/{{.Board}}/</h3>
- <form action="/{{.Board}}/submit" method="POST">
+ <form action="/{{.Board}}/submit" method="POST" enctype="multipart/form-data">
   name: <input type="text" name="name"><br>
   email: <input type="text" name="email"><br>
   subject: <input type="text" name="subject"><br>
   comment: <input type="text" name="comment"><br>
+  image: <input type="file" name="image" accept=".gif,.jpg,.jpeg,.png,image/gif,image/jpeg,image/png"><br>
   <input type="submit" value="submit">
  </form>
  <ul>
