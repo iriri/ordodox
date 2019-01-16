@@ -88,6 +88,16 @@ func writeJson(w http.ResponseWriter, v interface{}) {
 	w.Write(j)
 }
 
+// fine
+func redirect(w http.ResponseWriter, r *http.Request) {
+	b := chi.URLParam(r, "b")
+	if _, ok := database.Boards[b]; !ok {
+		error_(http.StatusNotFound)(w, r)
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/%s/", b), http.StatusFound)
+}
+
 func board(isJson bool) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		b := chi.URLParam(r, "b")
@@ -141,6 +151,13 @@ func thread(isJson bool) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
+func denormalizeSuffix(typ string) string {
+	if typ == "jpg" {
+		return "jpeg"
+	}
+	return typ
+}
+
 func image(w http.ResponseWriter, r *http.Request) {
 	uri := chi.URLParam(r, "i")
 	img, err := database.GetImage(uri)
@@ -148,7 +165,7 @@ func image(w http.ResponseWriter, r *http.Request) {
 		error_(http.StatusNotFound)(w, r)
 		return
 	}
-	w.Header().Set("Content-Type", "")
+	w.Header().Set("Content-Type", "image/"+denormalizeSuffix(uri[65:]))
 	w.Write(img)
 }
 
@@ -166,7 +183,7 @@ func thumb(w http.ResponseWriter, r *http.Request) {
 type unexpectedField string
 
 func (u unexpectedField) Error() string {
-	return fmt.Sprintf("Unexpected field: %s", u)
+	return fmt.Sprintf("Unexpected field: %s", string(u))
 }
 
 type fieldTooLong struct {
@@ -266,6 +283,17 @@ func parseMulti(w http.ResponseWriter, r *http.Request) (*database.Request, erro
 	if req.Image, req.ImageName, err = parseImage(form, "image", 0x300000); err != nil {
 		return nil, err
 	}
+	if req.ImageAlt, err = parseText(form, "alt", 512); err != nil {
+		return nil, err
+	}
+	if part, err := form.NextPart(); err != io.EOF {
+		if err == nil {
+			defer part.Close()
+			return nil, unexpectedField(part.FormName())
+		} else {
+			return nil, err
+		}
+	}
 	return req, nil
 }
 
@@ -275,7 +303,7 @@ func submit(w http.ResponseWriter, r *http.Request) {
 	var op int64
 	var err error
 	if t == "" {
-		op = -1
+		op = database.OpId
 	} else {
 		if op, err = strconv.ParseInt(t, 10, 64); err != nil {
 			error_(http.StatusNotFound)(w, r)

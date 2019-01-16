@@ -66,10 +66,14 @@ func submitImage(conn *sqlite3.Conn, input []byte) (string, error) {
 		return "", err
 	}
 	sum := sha512.Sum512_256(input)
-	name := hex.EncodeToString(sum[:]) + "." + normalizeSuffix(typ)
+	name := make([]byte, 65, 68)
+	hex.Encode(name[0:], sum[:])
+	name[64] = '.'
+	name = append(name, normalizeSuffix(typ)...)
+	name_ := string(name)
 	checkStmt, err := conn.Prepare(fmt.Sprintf(
-		"SELECT uri FROM images WHERE uri = '%s'",
-		name))
+		"SELECT NULL FROM images WHERE uri = '%s'",
+		name_))
 	if err != nil {
 		return "", err
 	}
@@ -77,7 +81,7 @@ func submitImage(conn *sqlite3.Conn, input []byte) (string, error) {
 	if ok, err := checkStmt.Step(); err != nil {
 		return "", err
 	} else if ok {
-		return name, nil
+		return name_, nil
 	}
 
 	size := img.Bounds().Size()
@@ -87,7 +91,7 @@ func submitImage(conn *sqlite3.Conn, input []byte) (string, error) {
 	}
 	insertStmt, err := conn.Prepare(fmt.Sprintf("INSERT INTO images "+
 		"VALUES('%s', ?, ?, %d, %d, %d)",
-		name, len(input)/1024, size.X, size.Y))
+		name_, len(input)/1024, size.X, size.Y))
 	if err != nil {
 		return "", err
 	}
@@ -99,7 +103,7 @@ func submitImage(conn *sqlite3.Conn, input []byte) (string, error) {
 	if _, err := insertStmt.Step(); err != nil {
 		return "", err
 	}
-	return name, nil
+	return name_, nil
 }
 
 type ImageNotFound string

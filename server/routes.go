@@ -10,6 +10,7 @@ import (
 
 func initRoutes(r *chi.Mux) {
 	r.Get("/", index)
+	r.Get("/{b}", redirect)
 	r.Get("/{b}/", board(false))
 	r.Get("/{b}/{t}", thread(false))
 	r.Get("/img/{i}", image)

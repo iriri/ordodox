@@ -8,25 +8,27 @@ import (
 	"ordodox/config"
 )
 
+const OpId = -1
+
 const nconns = 8
 
 var path string
 var conns = make(chan *sqlite3.Conn, nconns)
-var boards = make(map[string]string)
+var Boards = make(map[string]string)
 
-func init_(conn *sqlite3.Conn, boards_ []config.Board) error {
+func init_(conn *sqlite3.Conn, boards []config.Board) error {
 	err := conn.Exec("CREATE TABLE IF NOT EXISTS images(" +
 		"uri TEXT PRIMARY KEY," +
 		"data BLOB NOT NULL," +
 		"thumb BLOB NOT NULL," +
 		"size INT," +
 		"width INT," +
-		"height INT)")
+		"height INT) WITHOUT ROWID")
 	if err != nil {
 		return err
 	}
-	for _, b := range boards_ {
-		boards[b.Name] = b.Title
+	for _, b := range boards {
+		Boards[b.Name] = b.Title
 		err = conn.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s_posts("+
 			"id INTEGER PRIMARY KEY,"+
 			"op INT NOT NULL,"+
@@ -37,16 +39,46 @@ func init_(conn *sqlite3.Conn, boards_ []config.Board) error {
 			"subject TEXT,"+
 			"comment TEXT,"+
 			"imagename TEXT,"+
-			"imageuri TEXT REFERENCES images(name) ON UPDATE CASCADE)",
+			"imagealt TEXT,"+
+			"imageuri TEXT REFERENCES images(uri) ON UPDATE SET NULL)",
 			b.Name))
 		if err != nil {
+			return err
+		}
+		err = conn.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s_ops("+
+			"id INT PRIMARY KEY REFERENCES %s_posts(id) ON UPDATE CASCADE,"+
+			"bumped DATE NOT NULL) WITHOUT ROWID",
+			b.Name, b.Name))
+		if err != nil {
+			return err
+		}
+		err = conn.Exec(fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS %s_insert_op "+
+			"AFTER INSERT ON %s_posts WHEN NEW.op = -1 BEGIN "+
+			"INSERT INTO %s_ops VALUES("+
+			"(SELECT id FROM %s_posts WHERE op = -1 LIMIT 1),"+
+			"datetime('now'));"+
+			"UPDATE %s_posts SET op = id WHERE op = -1;"+
+			"END",
+			b.Name, b.Name, b.Name, b.Name, b.Name))
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+		err = conn.Exec(fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS %s_insert_post "+
+			"AFTER INSERT ON %s_posts WHEN NEW.op != -1 AND "+
+			"NEW.email IS NOT 'sage' BEGIN "+
+			"UPDATE %s_ops SET bumped = datetime('now') WHERE id = NEW.op;"+
+			"END",
+			b.Name, b.Name, b.Name))
+		if err != nil {
+			fmt.Println(err)
 			return err
 		}
 	}
 	return nil
 }
 
-func Init(path_ string, boards_ []config.Board) error {
+func Init(path_ string, boards []config.Board) error {
 	path = path_
 	for i := 1; i < nconns; i++ {
 		conn, err := sqlite3.Open(path)
@@ -62,26 +94,26 @@ func Init(path_ string, boards_ []config.Board) error {
 	}
 	defer func() { conns <- conn }()
 	return conn.WithTxImmediate(func() error {
-		return init_(conn, boards_)
+		return init_(conn, boards)
 	})
 }
 
 type BoardNotFound string
 
 func (b BoardNotFound) Error() string {
-	return fmt.Sprintf("Board not found: %s", b)
+	return fmt.Sprintf("Board not found: %s", string(b))
 }
 
 type OpNotFound int64
 
 func (op OpNotFound) Error() string {
-	return fmt.Sprintf("Op not found: %d", op)
+	return fmt.Sprintf("Op not found: %d", int64(op))
 }
 
 type IdNotFound int64
 
 func (id IdNotFound) Error() string {
-	return fmt.Sprintf("Post not found: %d", id)
+	return fmt.Sprintf("Post not found: %d", int64(id))
 }
 
 func getConn() (*sqlite3.Conn, func(*sqlite3.Conn), error) {
@@ -98,7 +130,7 @@ func getConn() (*sqlite3.Conn, func(*sqlite3.Conn), error) {
 }
 
 func enter(board string) (*sqlite3.Conn, func(*sqlite3.Conn), error) {
-	if _, ok := boards[board]; !ok {
+	if _, ok := Boards[board]; !ok {
 		// in theory an sql injection might still be possible if the
 		// config has an exceptionally stupid board name like "; DROP
 		// TABLES *; --" or something idk
@@ -109,6 +141,7 @@ func enter(board string) (*sqlite3.Conn, func(*sqlite3.Conn), error) {
 
 type ImageAttr struct {
 	Name   string
+	Alt    string
 	Uri    string
 	Size   int64
 	Width  int64
@@ -133,10 +166,8 @@ func GetBoard(board string) ([][]*Post, error) {
 	}
 	defer exit(conn)
 
-	stmt, err := conn.Prepare(fmt.Sprintf("SELECT id FROM %s_posts "+
-		"WHERE id = op "+
-		"ORDER BY date DESC "+
-		"LIMIT 10",
+	stmt, err := conn.Prepare(fmt.Sprintf("SELECT id FROM %s_ops "+
+		"ORDER BY bumped DESC LIMIT 10",
 		board))
 	if err != nil {
 		return nil, err
@@ -198,6 +229,7 @@ func GetThread(board string, op int64) ([]*Post, error) {
 			&post.Subject,
 			&post.Comment,
 			&post.Image.Name,
+			&post.Image.Alt,
 			&post.Image.Uri)
 		if err != nil {
 			return nil, err
@@ -229,28 +261,6 @@ func GetThread(board string, op int64) ([]*Post, error) {
 	return posts, nil
 }
 
-func GetOp(board string, id int64) (int64, error) {
-	conn, exit, err := enter(board)
-	if err != nil {
-		return 0, err
-	}
-	defer exit(conn)
-
-	stmt, err := conn.Prepare(fmt.Sprintf("SELECT op FROM %s_posts WHERE id = %d", board, id))
-	if err != nil {
-		return 0, err
-	}
-	defer stmt.Close()
-	if ok, err := stmt.Step(); err != nil {
-		return 0, err
-	} else if !ok {
-		return 0, IdNotFound(id)
-	}
-	var op int64
-	err = stmt.Scan(&op)
-	return op, err
-}
-
 // sadly, i want sql nulls and i don't feel like forking go-sqlite-lite which
 // treats the empty string as non-null and byte slices as blobs. this is the
 // sane thing to do, of course, but unfortunately the package doesn't export
@@ -263,6 +273,7 @@ type Request struct {
 	Comment   interface{}
 	Image     []byte
 	ImageName string
+	ImageAlt  interface{}
 }
 
 func Submit(board string, op int64, ip string, req *Request) error {
@@ -273,7 +284,7 @@ func Submit(board string, op int64, ip string, req *Request) error {
 	defer exit(conn)
 
 	if op > 0 {
-		stmt, err := conn.Prepare(fmt.Sprintf("SELECT op FROM %s_posts "+
+		stmt, err := conn.Prepare(fmt.Sprintf("SELECT NULL FROM %s_posts "+
 			"WHERE op = %d "+
 			"LIMIT 1",
 			board, op))
@@ -289,37 +300,25 @@ func Submit(board string, op int64, ip string, req *Request) error {
 	}
 
 	return conn.WithTx(func() error {
-		var err error
-		if req.Image != nil {
-			uri, err := submitImage(conn, req.Image)
-			if err != nil {
-				return err
-			}
-			err = conn.Exec(fmt.Sprintf("INSERT INTO %s_posts VALUES("+
+		if req.Image == nil {
+			return conn.Exec(fmt.Sprintf("INSERT INTO %s_posts VALUES("+
 				"NULL, %d, '%s', datetime('now'), "+
 				"?, ?, ?, ?, "+
-				"?, ?)",
+				"?, ?, ?)",
 				board, op, ip),
 				req.Name, req.Email, req.Subject, req.Comment,
-				req.ImageName, uri)
-		} else {
-			err = conn.Exec(fmt.Sprintf("INSERT INTO %s_posts VALUES("+
-				"NULL, %d, '%s', datetime('now'), "+
-				"?, ?, ?, ?, "+
-				"?, ?)",
-				board, op, ip),
-				req.Name, req.Email, req.Subject, req.Comment,
-				nil, nil)
+				nil, nil, nil)
 		}
+		uri, err := submitImage(conn, req.Image)
 		if err != nil {
 			return err
 		}
-		if op <= 0 {
-			return conn.Exec(fmt.Sprintf("UPDATE %s_posts "+
-				"SET op = id "+
-				"WHERE op = %d",
-				board, op))
-		}
-		return nil
+		return conn.Exec(fmt.Sprintf("INSERT INTO %s_posts VALUES("+
+			"NULL, %d, '%s', datetime('now'), "+
+			"?, ?, ?, ?, "+
+			"?, ?, ?)",
+			board, op, ip),
+			req.Name, req.Email, req.Subject, req.Comment,
+			req.ImageName, req.ImageAlt, uri)
 	})
 }

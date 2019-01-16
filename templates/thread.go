@@ -12,12 +12,24 @@ const thread = `<!DOCTYPE html>
 <body>
  <h3>{{.Op}}</h3>
  <form action="/{{.Board}}/{{.Op}}/reply" method="POST" enctype="multipart/form-data">
-  name: <input type="text" name="name"><br>
-  email: <input type="text" name="email"><br>
-  subject: <input type="text" name="subject"><br>
-  comment: <input type="text" name="comment"><br>
-  image: <input type="file" name="image" accept=".gif,.jpg,.jpeg,.png,image/gif,image/jpeg,image/png"><br>
-  <input type="submit" value="reply">
+  <table>
+   <tr><th><span>name</span></th><td><input type="text" name="name"></td></tr>
+   <tr><th><span>email</span></th><td><input type="text" name="email"></td></tr>
+   <tr><th><span>subject</span></th>
+    <td>
+     <input type="text" name="subject" style="width: 326px"><button><span>reply</span></button>
+    </td>
+   </tr>
+   <tr><th><span>comment</span></th><td><textarea name="comment" rows="6"></textarea></td></tr>
+   <tr><th><span>image</span></th>
+    <td>
+     <label id="upload">
+      <input type="file" name="image" accept=".gif,.jpg,.jpeg,.png,image/gif,image/jpeg,image/png">
+      <span>browse</span>
+     </label><input type="text" name="alt" style="width: 316px">
+    <td>
+   </tr>
+  </table>
  </form>
  <ul>
   {{range .Posts -}}
@@ -31,7 +43,7 @@ const thread = `<!DOCTYPE html>
    {{if .Image -}}
    <li>filename: {{.Image.Name}}</li>
    <li><a href="/img/{{.Image.Uri}}">
-    <img src="/thumb/{{.Image.Uri}}.thumb.jpg" href="/img/{{.Image.Uri}}">
+    <img src="/thumb/{{.Image.Uri}}.thumb.jpg" alt="{{.Image.Alt}}" href="/img/{{.Image.Uri}}">
    </a></li>
    {{- end}}
    -----<br>
