@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"html/template"
 
 	"github.com/bvinc/go-sqlite-lite/sqlite3"
 
@@ -40,13 +41,13 @@ func init_(conn *sqlite3.Conn, boards []config.Board) error {
 			"comment TEXT,"+
 			"imagename TEXT,"+
 			"imagealt TEXT,"+
-			"imageuri TEXT REFERENCES images(uri) ON UPDATE SET NULL)",
+			"imageuri TEXT REFERENCES images(uri) ON DELETE SET NULL)",
 			b.Name))
 		if err != nil {
 			return err
 		}
 		err = conn.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s_ops("+
-			"id INT PRIMARY KEY REFERENCES %s_posts(id) ON UPDATE CASCADE,"+
+			"id INT PRIMARY KEY REFERENCES %s_posts(id) ON DELETE CASCADE,"+
 			"bumped DATE NOT NULL) WITHOUT ROWID",
 			b.Name, b.Name))
 		if err != nil {
@@ -155,7 +156,7 @@ type Post struct {
 	Name    string
 	Email   string
 	Subject string
-	Comment string
+	Comment template.HTML
 	Image   *ImageAttr // pointer to avoid marshalling when nil... should consider alternatives
 }
 
@@ -218,6 +219,7 @@ func GetThread(board string, op int64) ([]*Post, error) {
 		}
 
 		post := new(Post)
+		comment := ""
 		post.Image = new(ImageAttr)
 		err = postStmt.Scan(
 			&post.Id,
@@ -227,7 +229,7 @@ func GetThread(board string, op int64) ([]*Post, error) {
 			&post.Name,
 			&post.Email,
 			&post.Subject,
-			&post.Comment,
+			&comment,
 			&post.Image.Name,
 			&post.Image.Alt,
 			&post.Image.Uri)
@@ -243,7 +245,9 @@ func GetThread(board string, op int64) ([]*Post, error) {
 			if ok, err := imgStmt.Step(); err != nil {
 				return nil, err
 			} else if !ok {
-				continue
+				// almost impossible due to the sql foreign key trigger
+				post.Image = nil
+				goto imgDeleted
 			}
 			err = imgStmt.Scan(&post.Image.Size, &post.Image.Width, &post.Image.Height)
 			if err != nil {
@@ -253,6 +257,8 @@ func GetThread(board string, op int64) ([]*Post, error) {
 				return nil, err
 			}
 		}
+	imgDeleted:
+		post.Comment = template.HTML(comment)
 		posts = append(posts, post)
 	}
 	if len(posts) == 0 {
@@ -299,6 +305,10 @@ func Submit(board string, op int64, ip string, req *Request) error {
 		}
 	}
 
+	req.Comment, err = parse(conn, board, req.Comment, op)
+	if err != nil {
+		return err
+	}
 	return conn.WithTx(func() error {
 		if req.Image == nil {
 			return conn.Exec(fmt.Sprintf("INSERT INTO %s_posts VALUES("+

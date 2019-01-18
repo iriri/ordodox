@@ -13,20 +13,23 @@ const thread = `<!DOCTYPE html>
  <h3>{{.Op}}</h3>
  <form action="/{{.Board}}/{{.Op}}/reply" method="POST" enctype="multipart/form-data">
   <table>
-   <tr><th><span>name</span></th><td><input type="text" name="name"></td></tr>
-   <tr><th><span>email</span></th><td><input type="text" name="email"></td></tr>
-   <tr><th><span>subject</span></th>
+   <tr><th><span class="d2">name</span></th><td><input type="text" name="name"></td></tr>
+   <tr><th><span class="d2">email</span></th><td><input type="text" name="email"></td></tr>
+   <tr><th><span class="d2">subject</span></th>
     <td>
-     <input type="text" name="subject" style="width: 326px"><button><span>reply</span></button>
+     <input type="text" name="subject" style="width: 326px"><button id="submit"
+     class="button" style="width: 52px"><span class="d2">reply</span></button>
     </td>
    </tr>
-   <tr><th><span>comment</span></th><td><textarea name="comment" rows="6"></textarea></td></tr>
-   <tr><th><span>image</span></th>
+   <tr><th><span class="d2">comment</span></th>
+    <td><textarea name="comment" rows="6"></textarea></td>
+   </tr>
+   <tr><th><span class="d2">image</span></th>
     <td>
-     <label id="upload">
+     <label id="upload" class="button" style="width: 62px">
       <input type="file" name="image" accept=".gif,.jpg,.jpeg,.png,image/gif,image/jpeg,image/png">
-      <span>browse</span>
-     </label><input type="text" name="alt" style="width: 316px">
+      <span class="d2">browse</span>
+     </label><input type="text" name="alt" style="width: 314px">
     <td>
    </tr>
   </table>
@@ -34,7 +37,7 @@ const thread = `<!DOCTYPE html>
  <ul>
   {{range .Posts -}}
   <li><ul>
-   <li>id: {{.Id}}</li>
+   <li id="{{.Id}}">id: {{.Id}}</li>
    <li>date: {{.Date}}</li>
    <li>name: {{.Name}}</li>
    <li>email: {{.Email}}</li>

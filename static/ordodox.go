@@ -19,31 +19,24 @@ table tr th {
  padding: 0 4px 0;
  vertical-align: middle;
 }
-table tr th span {
- position: relative;
- top: 2px;
-}
 table tr td input {
  font-family: inherit;
  font-size: inherit;
  width: 380px;
  border: 1px solid #0f0f0f;
 }
-table tr td button {
+table tr td .button {
  background-color: #d4d4d4;
  font-family: inherit;
  font-size: inherit;
- width: 52px;
- padding: 1px 0;
- margin-left: 2px;
  border: 1px solid #0f0f0f;
 }
-table tr td button:hover {
+table tr td .button:hover {
  background-color: #e6e6e6;
 }
-table tr td button span {
- position: relative;
- top: 2px;
+#submit {
+ padding: 1px 0;
+ margin-left: 2px;
 }
 table tr td textarea {
  font-family: inherit;
@@ -53,22 +46,21 @@ table tr td textarea {
  margin: 0;
  padding: 1px;
 }
-table tr td #upload {
- background-color: #d4d4d4;
- border: 1px solid #0f0f0f;
+td #upload {
  display: inline-block;
  padding: 2.5px 0 2px;
  margin-right: 2px;
- width: 60px;
 }
-table tr td #upload:hover {
- background-color: #e6e6e6;
-}
-table tr td #upload span {
- position: relative;
- top: 2px;
- left: 4px;
+table tr td #upload .d2 {
+ left: 5px;
 }
 table tr td input[type="file"] {
  display: none;
+}
+.d2 {
+ position: relative;
+ top: 2px;
+}
+.gt {
+ color: #0f7a48;
 }`)
