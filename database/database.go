@@ -62,7 +62,6 @@ func init_(conn *sqlite3.Conn, boards []config.Board) error {
 			"END",
 			b.Name, b.Name, b.Name, b.Name, b.Name))
 		if err != nil {
-			fmt.Println(err)
 			return err
 		}
 		err = conn.Exec(fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS %s_insert_post "+
@@ -72,7 +71,6 @@ func init_(conn *sqlite3.Conn, boards []config.Board) error {
 			"END",
 			b.Name, b.Name, b.Name))
 		if err != nil {
-			fmt.Println(err)
 			return err
 		}
 	}

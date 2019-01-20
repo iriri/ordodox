@@ -18,8 +18,13 @@ func initRoutes(mux *chi.Mux) {
 	mux.Get("/css/ordodox.css", static.Ordodox)
 	mux.Get("/json/{b}/", board(true))
 	mux.Get("/json/{b}/{t}", thread(true))
+
 	mux.Post("/{b}/submit", submit)
 	mux.Post("/{b}/{t}/reply", submit)
+
+	mux.Get("/robots.txt", static.Robots)
+	mux.Get("/favicon.ico", static.Favicon)
+
 	mux.NotFound(error_(http.StatusNotFound))
 	mux.MethodNotAllowed(error_(http.StatusMethodNotAllowed))
 }
