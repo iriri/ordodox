@@ -1,19 +1,26 @@
 package server
 
 import (
+	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"mime/multipart"
+	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
+	"golang.org/x/crypto/acme/autocert"
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"ordodox/config"
@@ -22,24 +29,13 @@ import (
 )
 
 var boards []config.Board
+var logger *log.Logger
 
-func logger(path string) func(http.Handler) http.Handler {
-	l := &lumberjack.Logger{Filename: path, MaxSize: 128, MaxBackups: 10}
-	return middleware.RequestLogger(&middleware.DefaultLogFormatter{
-		Logger:  log.New(l, "", log.LstdFlags|log.LUTC),
-		NoColor: true,
-	})
+func logReqs(path string) func(http.Handler) http.Handler {
+	l := &lumberjack.Logger{Filename: path, MaxSize: 128, MaxBackups: 10, Compress: true}
+	logger = log.New(l, "", log.LstdFlags|log.LUTC)
+	return middleware.RequestLogger(&middleware.DefaultLogFormatter{logger, true})
 }
-
-// don't think i need this since i'm limiting manually when parsing post requests?
-/*
-func limit(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, 0x400000)
-		h.ServeHTTP(w, r)
-	})
-}
-*/
 
 func secure(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -51,16 +47,49 @@ func secure(h http.Handler) http.Handler {
 	})
 }
 
-func New(boards_ []config.Board, logpath string) http.Handler {
-	boards = boards_
+func Init(opt *config.Opt) (func() error, chan struct{}) {
+	boards = opt.Boards
 
-	r := chi.NewRouter()
-	r.Use(logger(logpath))
-	// r.Use(limit)
-	r.Use(secure)
-	r.Use(middleware.DefaultCompress)
-	initRoutes(r)
-	return r
+	mux := chi.NewRouter()
+	mux.Use(logReqs(opt.Log))
+	mux.Use(limit)
+	mux.Use(secure)
+	mux.Use(middleware.DefaultCompress)
+	initRoutes(mux)
+
+	cfg := &tls.Config{
+		PreferServerCipherSuites: true,
+		CurvePreferences: []tls.CurveID{
+			tls.CurveP256,
+			tls.X25519,
+		},
+	}
+	srv := &http.Server{
+		Addr:         opt.Port,
+		Handler:      mux,
+		TLSConfig:    cfg,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
+	sigc := make(chan os.Signal, 1)
+	done := make(chan struct{}, 1)
+	signal.Notify(sigc, os.Interrupt)
+	go func() {
+		defer close(done)
+		<-sigc
+		log.Println("received SIGINT")
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Printf("error shutting down server: %v\n", err)
+		}
+	}()
+	if opt.Domain != "" {
+		return func() error { return srv.Serve(autocert.NewListener(opt.Domain)) }, done
+	}
+	return srv.ListenAndServe, done
 }
 
 func index(w http.ResponseWriter, _ *http.Request) {
@@ -68,7 +97,7 @@ func index(w http.ResponseWriter, _ *http.Request) {
 	templates.Index(w, boards)
 }
 
-// TODO: actually log stuff
+// TODO: rethink this
 func error_(code int) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(code)
@@ -316,6 +345,7 @@ func submit(w http.ResponseWriter, r *http.Request) {
 	if json_ { // TODO: what about images?
 		body, err := ioutil.ReadAll(&limitReader{r.Body, 0x400000})
 		if err != nil {
+			logger.Printf("error reading request: %v", err)
 			error_(http.StatusBadRequest)(w, r)
 			return
 		}
@@ -325,11 +355,14 @@ func submit(w http.ResponseWriter, r *http.Request) {
 		req, err = parseMulti(w, r)
 	}
 	if err != nil {
+		logger.Printf("error parsing request: %v", err)
 		error_(http.StatusBadRequest)(w, r)
 		return
 	}
-	if err = database.Submit(b, op, r.RemoteAddr, req); err != nil {
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	if err = database.Submit(b, op, ip, req); err != nil {
 		// TODO: handle different error types
+		logger.Printf("error submitting request: %v", err)
 		error_(http.StatusBadRequest)(w, r)
 		return
 	}

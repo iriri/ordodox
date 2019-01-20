@@ -1,3 +1,6 @@
+port = ":8081" # if domain is set, this is ignored and port 443 is always used
+# domain = "example.com" # uncomment this for use in prod with autocert tls
+
 [[boards]]
 name = "a"
 title = "antigua and barbuda"

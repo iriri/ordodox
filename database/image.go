@@ -147,5 +147,15 @@ func GetThumb(uri string) ([]byte, error) {
 	if len(uri) != 78 || !strings.HasSuffix(uri, ".thumb.jpg") {
 		return nil, ImageNotFound(uri)
 	}
-	return getImage(uri[:68], "thumb")
+	uri_ := uri[:68]
+	if t := getCachedThumb(uri_); t != nil {
+		return t, nil
+	}
+
+	t, err := getImage(uri_, "thumb")
+	if err != nil {
+		return nil, err
+	}
+	putCachedThumb(uri_, t)
+	return t, nil
 }

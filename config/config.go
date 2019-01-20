@@ -11,39 +11,40 @@ import (
 type Board struct{ Name, Title string }
 
 type Opt struct {
-	Db, Log, Port string
-	Boards        []Board
+	Db     string
+	ErrLog string
+	Log    string
+	Port   string
+	Domain string
+	Boards []Board
 }
 
 func parseFlags() (*Opt, string) {
 	var opt Opt
 	var path string
-	flag.String(&opt.Db, 'd', "", "ordodox.db", "db file")
-	flag.String(&opt.Log, 'l', "", "ordodox.log", "log file")
-	flag.String(&opt.Port, 'p', "", ":8081", "listen port")
 	flag.String(&path, 'c', "", "ordodox.toml", "config file")
+	flag.String(&opt.Db, 'd', "", "ordodox.db", "db file")
+	flag.String(&opt.ErrLog, 'e', "", "", "error log file")
+	flag.String(&opt.Log, 'l', "", "ordodox.log", "server log file")
 	flag.Parse(1)
 	return &opt, path
 }
 
-func parseConf(path string) ([]Board, error) {
+func parseConf(opt *Opt, path string) (*Opt, error) {
 	if _, err := os.Stat(path); err != nil {
 		return nil, err
 	}
-	var conf struct{ Boards []Board }
-	md, err := toml.DecodeFile(path, &conf)
+	md, err := toml.DecodeFile(path, opt)
 	if err != nil {
 		panic(err)
 	}
 	if ud := md.Undecoded(); len(ud) > 0 {
 		return nil, fmt.Errorf("unexpected key(s) in config file: %v", ud)
 	}
-	return conf.Boards, nil
+	return opt, nil
 }
 
 func Parse() (*Opt, error) {
 	opt, path := parseFlags()
-	var err error
-	opt.Boards, err = parseConf(path)
-	return opt, err
+	return parseConf(opt, path)
 }

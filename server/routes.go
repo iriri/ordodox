@@ -8,19 +8,18 @@ import (
 	"ordodox/static"
 )
 
-func initRoutes(r *chi.Mux) {
-	r.Get("/", index)
-	r.Get("/{b}", redirect)
-	r.Get("/{b}/", board(false))
-	r.Get("/{b}/{t}", thread(false))
-	r.Get("/img/{i}", image)
-	r.Get("/thumb/{t}", thumb)
-	r.Get("/css/reset.css", static.Reset)
-	r.Get("/css/ordodox.css", static.Ordodox)
-	r.Get("/json/{b}/", board(true))
-	r.Get("/json/{b}/{t}", thread(true))
-	r.Post("/{b}/submit", submit)
-	r.Post("/{b}/{t}/reply", submit)
-	r.NotFound(error_(http.StatusNotFound))
-	r.MethodNotAllowed(error_(http.StatusMethodNotAllowed))
+func initRoutes(mux *chi.Mux) {
+	mux.Get("/", index)
+	mux.Get("/{b}", redirect)
+	mux.Get("/{b}/", board(false))
+	mux.Get("/{b}/{t}", thread(false))
+	mux.Get("/img/{i}", image)
+	mux.Get("/thumb/{t}", thumb)
+	mux.Get("/css/ordodox.css", static.Ordodox)
+	mux.Get("/json/{b}/", board(true))
+	mux.Get("/json/{b}/{t}", thread(true))
+	mux.Post("/{b}/submit", submit)
+	mux.Post("/{b}/{t}/reply", submit)
+	mux.NotFound(error_(http.StatusNotFound))
+	mux.MethodNotAllowed(error_(http.StatusMethodNotAllowed))
 }

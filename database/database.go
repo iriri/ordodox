@@ -79,8 +79,10 @@ func init_(conn *sqlite3.Conn, boards []config.Board) error {
 	return nil
 }
 
-func Init(path_ string, boards []config.Board) error {
-	path = path_
+func Init(opt *config.Opt) error {
+	path = opt.Db
+	initCaches()
+
 	for i := 1; i < nconns; i++ {
 		conn, err := sqlite3.Open(path)
 		if err != nil {
@@ -88,14 +90,13 @@ func Init(path_ string, boards []config.Board) error {
 		}
 		conns <- conn
 	}
-
 	conn, err := sqlite3.Open(path)
 	if err != nil {
 		return err
 	}
 	defer func() { conns <- conn }()
 	return conn.WithTxImmediate(func() error {
-		return init_(conn, boards)
+		return init_(conn, opt.Boards)
 	})
 }
 
