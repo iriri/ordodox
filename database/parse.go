@@ -1,7 +1,6 @@
 package database
 
 import (
-	"fmt"
 	"html"
 	"strconv"
 	"strings"
@@ -25,7 +24,8 @@ func flushRef(conn *sqlite3.Conn, board string, res, sub *strings.Builder, op in
 		return nil
 	}
 
-	stmt, err := conn.Prepare(fmt.Sprintf("SELECT op FROM %s_posts WHERE id = %d", board, id))
+	stmt, err := conn.Prepare("SELECT op FROM " + board + "_posts " +
+		"WHERE id=" + strconv.FormatInt(id, 10))
 	if err != nil {
 		return err
 	}
