@@ -32,9 +32,19 @@ var boards []config.Board
 var logger *log.Logger
 
 func logReqs(path string) func(http.Handler) http.Handler {
-	l := &lumberjack.Logger{Filename: path, MaxSize: 128, MaxBackups: 10, Compress: true}
-	logger = log.New(l, "", log.LstdFlags|log.LUTC)
-	return middleware.RequestLogger(&middleware.DefaultLogFormatter{logger, true})
+	logger = log.New(
+		&lumberjack.Logger{
+			Filename:   path,
+			MaxSize:    128,
+			MaxBackups: 10,
+			Compress:   true,
+		},
+		"",
+		log.LstdFlags|log.LUTC)
+	return middleware.RequestLogger(&middleware.DefaultLogFormatter{
+		Logger:  logger,
+		NoColor: true,
+	})
 }
 
 func secure(h http.Handler) http.Handler {
@@ -57,22 +67,12 @@ func Init(opt *config.Opt) (func() error, chan struct{}) {
 	mux.Use(middleware.DefaultCompress)
 	initRoutes(mux)
 
-	cfg := &tls.Config{
-		PreferServerCipherSuites: true,
-		CurvePreferences: []tls.CurveID{
-			tls.CurveP256,
-			tls.X25519,
-		},
-	}
 	srv := &http.Server{
-		Addr:         opt.Port,
 		Handler:      mux,
-		TLSConfig:    cfg,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
-
 	sigc := make(chan os.Signal, 1)
 	done := make(chan struct{}, 1)
 	signal.Notify(sigc, os.Interrupt)
@@ -86,10 +86,21 @@ func Init(opt *config.Opt) (func() error, chan struct{}) {
 			log.Printf("error shutting down server: %v\n", err)
 		}
 	}()
-	if opt.Domain != "" {
-		return func() error { return srv.Serve(autocert.NewListener(opt.Domain)) }, done
+	if opt.Domain == "" {
+		srv.Addr = opt.Port
+		return srv.ListenAndServe, done
 	}
-	return srv.ListenAndServe, done
+
+	mgr := &autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: autocert.HostWhitelist(opt.Domain),
+		Cache:      autocert.DirCache(opt.Cache),
+	}
+	cfg := mgr.TLSConfig()
+	cfg.PreferServerCipherSuites = true
+	cfg.CurvePreferences = []tls.CurveID{tls.CurveP256, tls.X25519}
+	srv.TLSConfig = cfg
+	return func() error { return srv.Serve(mgr.Listener()) }, done
 }
 
 func index(w http.ResponseWriter, _ *http.Request) {
@@ -343,7 +354,8 @@ func submit(w http.ResponseWriter, r *http.Request) {
 	var req *database.Request
 	json_ := strings.Contains(r.Header.Get("Content-Type"), "json")
 	if json_ { // TODO: what about images?
-		body, err := ioutil.ReadAll(&limitReader{r.Body, 0x400000})
+		var body []byte
+		body, err = ioutil.ReadAll(&limitReader{r.Body, 0x400000})
 		if err != nil {
 			logger.Printf("error reading request: %v", err)
 			error_(http.StatusBadRequest)(w, r)

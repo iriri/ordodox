@@ -10,10 +10,6 @@ import (
 	"github.com/bvinc/go-sqlite-lite/sqlite3"
 )
 
-func lookupRef(id int64) string {
-	return ""
-}
-
 func flushGreen(res, sub *strings.Builder) {
 	res.WriteString("<span class=\"gt\">")
 	res.WriteString(html.EscapeString(sub.String()))
@@ -47,11 +43,16 @@ func flushRef(conn *sqlite3.Conn, board string, res, sub *strings.Builder, op in
 		return err
 	}
 
-	if op_ == op {
-		res.WriteString(fmt.Sprintf("<a href=\"#%d\">", id))
-	} else {
-		res.WriteString(fmt.Sprintf("<a href=\"/%s/%d#%d\">", board, op_, id))
+	res.WriteString("<a href=\"")
+	if op != op_ {
+		res.WriteByte('/')
+		res.WriteString(board)
+		res.WriteByte('/')
+		res.WriteString(strconv.FormatInt(op_, 10))
 	}
+	res.WriteByte('#')
+	res.WriteString(sub.String()[2:])
+	res.WriteString("\">")
 	res.WriteString(html.EscapeString(sub.String()))
 	res.WriteString("</a>")
 	sub.Reset()

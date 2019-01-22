@@ -15,6 +15,7 @@ type Opt struct {
 	ErrLog string
 	Log    string
 	Port   string
+	Cache  string
 	Domain string
 	Boards []Board
 }
@@ -25,7 +26,8 @@ func parseFlags() (*Opt, string) {
 	flag.String(&path, 'c', "", "ordodox.toml", "config file")
 	flag.String(&opt.Db, 'd', "", "ordodox.db", "db file")
 	flag.String(&opt.ErrLog, 'e', "", "", "error log file")
-	flag.String(&opt.Log, 'l', "", "ordodox.log", "server log file")
+	flag.String(&opt.Log, 'f', "", "ordodox.log", "server log file")
+	flag.String(&opt.Cache, 'g', "", "ordodox-autocert", "autocert cache dir")
 	flag.Parse(1)
 	return &opt, path
 }

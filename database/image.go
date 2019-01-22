@@ -11,6 +11,7 @@ import (
 	"image/jpeg"
 	_ "image/png"
 	"strings"
+	"unsafe"
 
 	"github.com/bamiaux/rez"
 	"github.com/bvinc/go-sqlite-lite/sqlite3"
@@ -52,7 +53,7 @@ func makeThumb(input image.Image, size image.Point) ([]byte, error) {
 		return nil, err
 	}
 	buf := new(bytes.Buffer)
-	err = jpeg.Encode(buf, output, &jpeg.Options{90})
+	err = jpeg.Encode(buf, output, &jpeg.Options{Quality: 90})
 	if err != nil {
 		return nil, err
 	}
@@ -66,11 +67,11 @@ func submitImage(conn *sqlite3.Conn, input []byte) (string, error) {
 		return "", err
 	}
 	sum := sha512.Sum512_256(input)
-	name := make([]byte, 65, 68)
-	hex.Encode(name[0:], sum[:])
+	name := make([]byte, 68) // only doing this because i can't use a strings.Builder here
+	hex.Encode(name, sum[:])
 	name[64] = '.'
-	name = append(name, normalizeSuffix(typ)...)
-	name_ := string(name)
+	copy(name[65:], normalizeSuffix(typ))
+	name_ := *(*string)(unsafe.Pointer(&name)) // at this point, why not
 	checkStmt, err := conn.Prepare(fmt.Sprintf(
 		"SELECT NULL FROM images WHERE uri = '%s'",
 		name_))
