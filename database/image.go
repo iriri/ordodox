@@ -5,11 +5,11 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"image"
 	_ "image/gif"
 	"image/jpeg"
 	_ "image/png"
-	"strconv"
 	"strings"
 	"unsafe"
 
@@ -72,7 +72,9 @@ func submitImage(conn *sqlite3.Conn, input []byte) (string, error) {
 	name[64] = '.'
 	copy(name[65:], normalizeSuffix(typ))
 	name_ := *(*string)(unsafe.Pointer(&name)) // at this point, why not
-	checkStmt, err := conn.Prepare("SELECT NULL FROM images WHERE uri='" + name_ + "'")
+	checkStmt, err := conn.Prepare(fmt.Sprintf(
+		"SELECT NULL FROM images WHERE uri = '%s'",
+		name_))
 	if err != nil {
 		return "", err
 	}
@@ -88,10 +90,9 @@ func submitImage(conn *sqlite3.Conn, input []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// this is fucking unreadable but i'm triggered by how slow Sprintf is
-	insertStmt, err := conn.Prepare("INSERT INTO images VALUES('" +
-		name_ + "',?,?," + strconv.Itoa(len(input)/1024) + "," +
-		strconv.Itoa(size.X) + "," + strconv.Itoa(size.X) + ")")
+	insertStmt, err := conn.Prepare(fmt.Sprintf("INSERT INTO images "+
+		"VALUES('%s', ?, ?, %d, %d, %d)",
+		name_, len(input)/1024, size.X, size.Y))
 	if err != nil {
 		return "", err
 	}
@@ -109,7 +110,7 @@ func submitImage(conn *sqlite3.Conn, input []byte) (string, error) {
 type ImageNotFound string
 
 func (uri ImageNotFound) Error() string {
-	return "Image not found: " + string(uri)
+	return fmt.Sprintf("Image not found: %s", uri)
 }
 
 func getImage(uri, kind string) ([]byte, error) {
@@ -119,7 +120,7 @@ func getImage(uri, kind string) ([]byte, error) {
 	}
 	defer exit(conn)
 
-	stmt, err := conn.Prepare("SELECT " + kind + " FROM images WHERE uri=?")
+	stmt, err := conn.Prepare(fmt.Sprintf("SELECT %s FROM images WHERE uri = ?", kind))
 	if err != nil {
 		return nil, err
 	}

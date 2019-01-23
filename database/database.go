@@ -3,7 +3,6 @@ package database
 import (
 	"fmt"
 	"html/template"
-	"strconv"
 
 	"github.com/bvinc/go-sqlite-lite/sqlite3"
 
@@ -31,7 +30,6 @@ func init_(conn *sqlite3.Conn, boards []config.Board) error {
 	}
 	for _, b := range boards {
 		Boards[b.Name] = b.Title
-		// i don't care about startup time so these Sprintfs can stay
 		err = conn.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s_posts("+
 			"id INTEGER PRIMARY KEY,"+
 			"op INT NOT NULL,"+
@@ -56,20 +54,20 @@ func init_(conn *sqlite3.Conn, boards []config.Board) error {
 			return err
 		}
 		err = conn.Exec(fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS %s_insert_op "+
-			"AFTER INSERT ON %s_posts WHEN NEW.op=-1 BEGIN "+
+			"AFTER INSERT ON %s_posts WHEN NEW.op = -1 BEGIN "+
 			"INSERT INTO %s_ops VALUES("+
-			"(SELECT id FROM %s_posts WHERE op=-1 LIMIT 1),"+
+			"(SELECT id FROM %s_posts WHERE op = -1 LIMIT 1),"+
 			"datetime('now'));"+
-			"UPDATE %s_posts SET op=id WHERE op=-1;"+
+			"UPDATE %s_posts SET op = id WHERE op = -1;"+
 			"END",
 			b.Name, b.Name, b.Name, b.Name, b.Name))
 		if err != nil {
 			return err
 		}
 		err = conn.Exec(fmt.Sprintf("CREATE TRIGGER IF NOT EXISTS %s_insert_post "+
-			"AFTER INSERT ON %s_posts WHEN NEW.op!=-1 AND "+
+			"AFTER INSERT ON %s_posts WHEN NEW.op != -1 AND "+
 			"NEW.email IS NOT 'sage' BEGIN "+
-			"UPDATE %s_ops SET bumped=datetime('now') WHERE id=NEW.op;"+
+			"UPDATE %s_ops SET bumped = datetime('now') WHERE id = NEW.op;"+
 			"END",
 			b.Name, b.Name, b.Name))
 		if err != nil {
@@ -103,19 +101,19 @@ func Init(opt *config.Opt) error {
 type BoardNotFound string
 
 func (b BoardNotFound) Error() string {
-	return "Board not found: " + string(b)
+	return fmt.Sprintf("Board not found: %s", string(b))
 }
 
 type OpNotFound int64
 
 func (op OpNotFound) Error() string {
-	return "Op not found: " + strconv.FormatInt(int64(op), 10)
+	return fmt.Sprintf("Op not found: %d", int64(op))
 }
 
 type IdNotFound int64
 
 func (id IdNotFound) Error() string {
-	return "Post not found: " + strconv.FormatInt(int64(id), 10)
+	return fmt.Sprintf("Post not found: %d", int64(id))
 }
 
 func getConn() (*sqlite3.Conn, func(*sqlite3.Conn), error) {
@@ -168,8 +166,9 @@ func GetBoard(board string) ([][]*Post, error) {
 	}
 	defer exit(conn)
 
-	stmt, err := conn.Prepare("SELECT id FROM " + board + "_ops " +
-		"ORDER BY bumped DESC LIMIT 10")
+	stmt, err := conn.Prepare(fmt.Sprintf("SELECT id FROM %s_ops "+
+		"ORDER BY bumped DESC LIMIT 10",
+		board))
 	if err != nil {
 		return nil, err
 	}
@@ -198,13 +197,15 @@ func GetThread(board string, op int64) ([]*Post, error) {
 	}
 	defer exit(conn)
 
-	postStmt, err := conn.Prepare("SELECT * FROM " + board + "_posts " +
-		"WHERE op=" + strconv.FormatInt(op, 10) + " ORDER BY id")
+	postStmt, err := conn.Prepare(fmt.Sprintf("SELECT * FROM %s_posts "+
+		"WHERE op = %d "+
+		"ORDER BY id",
+		board, op))
 	if err != nil {
 		return nil, err
 	}
 	defer postStmt.Close()
-	imgStmt, err := conn.Prepare("SELECT size, width, height FROM images WHERE uri=?")
+	imgStmt, err := conn.Prepare("SELECT size, width, height FROM images WHERE uri = ?")
 	if err != nil {
 		return nil, err
 	}
@@ -287,10 +288,11 @@ func Submit(board string, op int64, ip string, req *Request) error {
 	}
 	defer exit(conn)
 
-	op_ := strconv.FormatInt(op, 10)
 	if op > 0 {
-		stmt, err := conn.Prepare("SELECT NULL FROM " + board + "_posts " +
-			"WHERE op=" + op_ + " LIMIT 1")
+		stmt, err := conn.Prepare(fmt.Sprintf("SELECT NULL FROM %s_posts "+
+			"WHERE op = %d "+
+			"LIMIT 1",
+			board, op))
 		if err != nil {
 			return err
 		}
@@ -307,25 +309,25 @@ func Submit(board string, op int64, ip string, req *Request) error {
 		return err
 	}
 	return conn.WithTx(func() error {
-		query := "INSERT INTO " + board + "_posts VALUES(" +
-			"NULL," + op_ + ",'" + ip + "',datetime('now')," +
-			"?,?,?,?,?,?,?)"
-		params := make([]interface{}, 7)
-		params[0] = req.Name
-		params[1] = req.Email
-		params[2] = req.Subject
-		params[3] = req.Comment
 		if req.Image == nil {
-			return conn.Exec(query, params...)
+			return conn.Exec(fmt.Sprintf("INSERT INTO %s_posts VALUES("+
+				"NULL, %d, '%s', datetime('now'), "+
+				"?, ?, ?, ?, "+
+				"?, ?, ?)",
+				board, op, ip),
+				req.Name, req.Email, req.Subject, req.Comment,
+				nil, nil, nil)
 		}
-
 		uri, err := submitImage(conn, req.Image)
 		if err != nil {
 			return err
 		}
-		params[4] = req.ImageName
-		params[5] = req.ImageAlt
-		params[6] = uri
-		return conn.Exec(query, params...)
+		return conn.Exec(fmt.Sprintf("INSERT INTO %s_posts VALUES("+
+			"NULL, %d, '%s', datetime('now'), "+
+			"?, ?, ?, ?, "+
+			"?, ?, ?)",
+			board, op, ip),
+			req.Name, req.Email, req.Subject, req.Comment,
+			req.ImageName, req.ImageAlt, uri)
 	})
 }

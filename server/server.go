@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -82,7 +83,7 @@ func Init(opt *config.Opt) (func() error, chan struct{}) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(ctx); err != nil {
-			log.Println("error shutting down server: " + err.Error())
+			log.Printf("error shutting down server: %v\n", err)
 		}
 	}()
 	if opt.Domain == "" {
@@ -134,7 +135,7 @@ func redirect(w http.ResponseWriter, r *http.Request) {
 		error_(http.StatusNotFound)(w, r)
 		return
 	}
-	http.Redirect(w, r, "/"+b+"/", http.StatusFound)
+	http.Redirect(w, r, fmt.Sprintf("/%s/", b), http.StatusFound)
 }
 
 func board(isJson bool) func(http.ResponseWriter, *http.Request) {
@@ -222,7 +223,7 @@ func thumb(w http.ResponseWriter, r *http.Request) {
 type unexpectedField string
 
 func (u unexpectedField) Error() string {
-	return "Unexpected field: " + string(u)
+	return fmt.Sprintf("Unexpected field: %s", string(u))
 }
 
 type fieldTooLong struct {
@@ -231,13 +232,13 @@ type fieldTooLong struct {
 }
 
 func (f fieldTooLong) Error() string {
-	return "Field " + f.name + " exceeded maximum length " + strconv.Itoa(f.n)
+	return fmt.Sprintf("Field %s exceeded maximum length %d", f.name, f.n)
 }
 
 type unsupportedMimetype struct{ name, typ string }
 
 func (u unsupportedMimetype) Error() string {
-	return "Unsupported MIME type " + u.typ + " in field " + u.name
+	return fmt.Sprintf("Unsupported MIME type %s in field %s", u.typ, u.name)
 }
 
 type limitReader struct {
@@ -356,7 +357,7 @@ func submit(w http.ResponseWriter, r *http.Request) {
 		var body []byte
 		body, err = ioutil.ReadAll(&limitReader{r.Body, 0x400000})
 		if err != nil {
-			logger.Println("error reading request: " + err.Error())
+			logger.Printf("error reading request: %v", err)
 			error_(http.StatusBadRequest)(w, r)
 			return
 		}
@@ -366,20 +367,20 @@ func submit(w http.ResponseWriter, r *http.Request) {
 		req, err = parseMulti(w, r)
 	}
 	if err != nil {
-		logger.Println("error parsing request: " + err.Error())
+		logger.Printf("error parsing request: %v", err)
 		error_(http.StatusBadRequest)(w, r)
 		return
 	}
 	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
 	if err = database.Submit(b, op, ip, req); err != nil {
 		// TODO: handle different error types
-		logger.Println("error submitting request: " + err.Error())
+		logger.Printf("error submitting request: %v", err)
 		error_(http.StatusBadRequest)(w, r)
 		return
 	}
 	if json_ {
 		w.WriteHeader(http.StatusCreated) // idk what you're actually supposed to do lmao
 	} else if strings.Contains(r.Header.Get("Accept"), "text/html") {
-		http.Redirect(w, r, "/"+b+"/", http.StatusFound)
+		http.Redirect(w, r, fmt.Sprintf("/%s/", b), http.StatusFound)
 	}
 }
