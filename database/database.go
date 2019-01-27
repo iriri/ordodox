@@ -159,33 +159,134 @@ type Post struct {
 	Image   *ImageAttr // pointer to avoid marshalling when nil... should consider alternatives
 }
 
-func GetBoard(board string) ([][]*Post, error) {
+func scanPost(postStmt, imgStmt *sqlite3.Stmt) (*Post, error) {
+	post := new(Post)
+	comment := ""
+	post.Image = new(ImageAttr)
+	err := postStmt.Scan(
+		&post.Id,
+		&post.Op,
+		nil,
+		&post.Date,
+		&post.Name,
+		&post.Email,
+		&post.Subject,
+		&comment,
+		&post.Image.Name,
+		&post.Image.Alt,
+		&post.Image.Uri)
+	if err != nil {
+		return nil, err
+	}
+	if post.Image.Uri == "" {
+		post.Image = nil
+	} else {
+		if err = imgStmt.Bind(post.Image.Uri); err != nil {
+			return nil, err
+		}
+		if ok, err := imgStmt.Step(); err != nil {
+			return nil, err
+		} else if !ok {
+			// almost impossible due to the sql foreign key trigger
+			post.Image = nil
+			goto imgDeleted
+		}
+		err = imgStmt.Scan(&post.Image.Size, &post.Image.Width, &post.Image.Height)
+		if err != nil {
+			return nil, err
+		}
+		if err = imgStmt.Reset(); err != nil {
+			return nil, err
+		}
+	}
+imgDeleted:
+	if post.Name == "" {
+		post.Name = "Anonymous"
+	}
+	post.Comment = template.HTML(comment)
+	return post, nil
+}
+
+type Preview struct {
+	Op      *Post
+	Replies []*Post
+}
+
+func GetBoard(board string) ([]Preview, error) {
 	conn, exit, err := enter(board)
 	if err != nil {
 		return nil, err
 	}
 	defer exit(conn)
 
-	stmt, err := conn.Prepare(fmt.Sprintf("SELECT id FROM %s_ops "+
+	/* i assume there's a better way that reduces the number of trips to
+	 * the db but i know basically nothing about sql (: */
+	opStmt, err := conn.Prepare(fmt.Sprintf("SELECT id FROM %s_ops "+
 		"ORDER BY bumped DESC LIMIT 10",
 		board))
 	if err != nil {
 		return nil, err
 	}
-	threads := make([][]*Post, 0, 10)
+	defer opStmt.Close()
+	postStmt, err := conn.Prepare(fmt.Sprintf("SELECT * FROM %s_posts "+
+		"WHERE id = ? UNION "+
+		"SELECT * FROM "+
+		"(SELECT * FROM %s_posts WHERE op = ? "+
+		"ORDER BY id DESC LIMIT 3)", board, board))
+	if err != nil {
+		return nil, err
+	}
+	defer postStmt.Close()
+	imgStmt, err := conn.Prepare("SELECT size, width, height FROM images WHERE uri = ?")
+	if err != nil {
+		return nil, err
+	}
+	defer imgStmt.Close()
+
+	threads := make([]Preview, 0, 10)
 	for {
-		if ok, err := stmt.Step(); err != nil {
+		if ok, err := opStmt.Step(); err != nil {
 			return nil, err
 		} else if !ok {
 			break
 		}
 
 		var op int64
-		err = stmt.Scan(&op)
+		err = opStmt.Scan(&op)
 		if err != nil {
 			return nil, err
 		}
-		threads = append(threads, []*Post{&Post{Id: op}})
+		if err = postStmt.Bind(op, op); err != nil {
+			return nil, err
+		}
+		var prv Preview
+		if ok, err := postStmt.Step(); err != nil {
+			return nil, err
+		} else if !ok {
+			continue // ???
+		}
+		post, err := scanPost(postStmt, imgStmt)
+		if err != nil {
+			return nil, err
+		}
+		prv.Op = post
+		for {
+			if ok, err := postStmt.Step(); err != nil {
+				return nil, err
+			} else if !ok {
+				break
+			}
+
+			post, err := scanPost(postStmt, imgStmt)
+			if err != nil {
+				return nil, err
+			}
+			prv.Replies = append(prv.Replies, post)
+		}
+		if err = postStmt.Reset(); err != nil {
+			return nil, err
+		}
+		threads = append(threads, prv)
 	}
 	return threads, nil
 }
@@ -209,6 +310,8 @@ func GetThread(board string, op int64) ([]*Post, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer imgStmt.Close()
+
 	posts := make([]*Post, 0, 64)
 	for {
 		if ok, err := postStmt.Step(); err != nil {
@@ -217,47 +320,10 @@ func GetThread(board string, op int64) ([]*Post, error) {
 			break
 		}
 
-		post := new(Post)
-		comment := ""
-		post.Image = new(ImageAttr)
-		err = postStmt.Scan(
-			&post.Id,
-			&post.Op,
-			nil,
-			&post.Date,
-			&post.Name,
-			&post.Email,
-			&post.Subject,
-			&comment,
-			&post.Image.Name,
-			&post.Image.Alt,
-			&post.Image.Uri)
+		post, err := scanPost(postStmt, imgStmt)
 		if err != nil {
 			return nil, err
 		}
-		if post.Image.Uri == "" {
-			post.Image = nil
-		} else {
-			if err = imgStmt.Bind(post.Image.Uri); err != nil {
-				return nil, err
-			}
-			if ok, err := imgStmt.Step(); err != nil {
-				return nil, err
-			} else if !ok {
-				// almost impossible due to the sql foreign key trigger
-				post.Image = nil
-				goto imgDeleted
-			}
-			err = imgStmt.Scan(&post.Image.Size, &post.Image.Width, &post.Image.Height)
-			if err != nil {
-				return nil, err
-			}
-			if err = imgStmt.Reset(); err != nil {
-				return nil, err
-			}
-		}
-	imgDeleted:
-		post.Comment = template.HTML(comment)
 		posts = append(posts, post)
 	}
 	if len(posts) == 0 {

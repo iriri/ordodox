@@ -20,7 +20,7 @@ func initRoutes(mux *chi.Mux) {
 	mux.Get("/json/{b}/{t}", thread(true))
 
 	mux.Post("/{b}/submit", submit)
-	mux.Post("/{b}/{t}/reply", submit)
+	mux.Post("/{b}/{t}/reply", reply)
 
 	mux.Get("/robots.txt", static.Robots)
 	mux.Get("/favicon.ico", static.Favicon)

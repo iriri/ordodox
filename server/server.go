@@ -141,19 +141,20 @@ func redirect(w http.ResponseWriter, r *http.Request) {
 func board(isJson bool) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		b := chi.URLParam(r, "b")
-		threads, err := database.GetBoard(b)
+		previews, err := database.GetBoard(b)
 		if err != nil {
 			error_(http.StatusNotFound)(w, r)
 			return
 		}
 		if isJson {
-			writeJson(w, threads)
+			writeJson(w, previews)
 		} else {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			err = templates.Board(w, struct {
-				Board   string
-				Threads [][]*database.Post
-			}{b, threads})
+				Board    string
+				Title    string
+				Previews []database.Preview
+			}{b, database.Boards[b], previews})
 			if err != nil {
 				panic(err)
 			}
@@ -181,9 +182,10 @@ func thread(isJson bool) func(http.ResponseWriter, *http.Request) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			err = templates.Thread(w, struct {
 				Board string
-				Op    int64
+				Title string
+				Op    *database.Post
 				Posts []*database.Post
-			}{b, op, posts})
+			}{b, database.Boards[b], posts[0], posts[1:]})
 			if err != nil {
 				panic(err)
 			}
@@ -337,20 +339,8 @@ func parseMulti(w http.ResponseWriter, r *http.Request) (*database.Request, erro
 	return req, nil
 }
 
-func submit(w http.ResponseWriter, r *http.Request) {
-	b := chi.URLParam(r, "b")
-	t := chi.URLParam(r, "t")
-	var op int64
+func submit_(w http.ResponseWriter, r *http.Request, b string, op int64) {
 	var err error
-	if t == "" {
-		op = database.OpId
-	} else {
-		if op, err = strconv.ParseInt(t, 10, 64); err != nil {
-			error_(http.StatusNotFound)(w, r)
-			return
-		}
-	}
-
 	var req *database.Request
 	json_ := strings.Contains(r.Header.Get("Content-Type"), "json")
 	if json_ { // TODO: what about images?
@@ -383,4 +373,23 @@ func submit(w http.ResponseWriter, r *http.Request) {
 	} else if strings.Contains(r.Header.Get("Accept"), "text/html") {
 		http.Redirect(w, r, fmt.Sprintf("/%s/", b), http.StatusFound)
 	}
+}
+
+func submit(w http.ResponseWriter, r *http.Request) {
+	submit_(w, r, chi.URLParam(r, "b"), database.OpId)
+
+}
+
+func reply(w http.ResponseWriter, r *http.Request) {
+	t := chi.URLParam(r, "t")
+	if t == "" {
+		error_(http.StatusBadRequest)(w, r)
+		return
+	}
+	op, err := strconv.ParseInt(t, 10, 64)
+	if err != nil {
+		error_(http.StatusNotFound)(w, r)
+		return
+	}
+	submit_(w, r, chi.URLParam(r, "b"), op)
 }

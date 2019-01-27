@@ -10,5 +10,4 @@ No modularity - One binary with templates compiled in + one config file
 No features - Features are for squares.
 
 ### Todo
-aging, csrf mitigation, moderation, actually learning enough ache tee em el and
-cee ess ess make it not look horrible
+aging, csrf mitigation, moderation

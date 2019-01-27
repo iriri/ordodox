@@ -9,7 +9,6 @@ const index = `<!DOCTYPE html>
  <title>boards</title>
 </head>
 <body>
- <h3>boards</h3>
  <ul>
   {{range . -}}
   <li><a href="{{.Name}}/">/{{.Name}}/ - {{.Title}}</a></li>
