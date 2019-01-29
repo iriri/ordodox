@@ -332,11 +332,11 @@ func GetThread(board string, op int64) ([]*Post, error) {
 	return posts, nil
 }
 
-// sadly, i want sql nulls and i don't feel like forking go-sqlite-lite which
-// treats the empty string as non-null and byte slices as blobs. this is the
-// sane thing to do, of course, but unfortunately the package doesn't export
-// the sqlite_bind_* functions meaning that the user can't just write their own
-// custom bind function
+// the use of interface{} here is due to go-sqlite-lite, not go. i (stupidly)
+// want sql nulls and go-sqlite-lite (sanely) treats the empty string as
+// non-null and byte slices as blobs. unfortunately writing a custom bind
+// function isn't an option either as the package doesn't export the
+// sqlite_bind_* functions and i don't feel like forking the package
 type Request struct {
 	Name      interface{}
 	Email     interface{}
