@@ -81,7 +81,7 @@ func limit(h http.Handler) http.Handler {
 		ip, _, _ := net.SplitHostPort(r.RemoteAddr)
 		l := getLimiter(ip)
 		if l == nil {
-			l = rate.NewLimiter(3, 7)
+			l = rate.NewLimiter(3, 15)
 			putLimiter(ip, l)
 		}
 		if l.Wait(r.Context()) != nil {

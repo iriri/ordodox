@@ -58,9 +58,8 @@ h1 {
 img {
  display: block;
 }
-.d2 {
+.rel {
  position: relative;
- top: 2px;
 }
 .header {
  display: inline-block;
@@ -70,36 +69,36 @@ img {
  text-align: center;
  padding: 5px 0 0;
 }
-.header form table {
+.header > form table {
  border-collapse: separate;
  border-spacing: 2px;
 }
-.header form th {
+.header > form th {
  background-color: #d4d4d4;
  text-align: left;
  padding: 0 4px 0;
  vertical-align: middle;
 }
-.header form input {
+.header > form input {
  font-family: inherit;
  font-size: inherit;
  width: 380px;
  border: 1px solid #0f0f0f;
 }
-.header form .button {
+.header > form .button {
  background-color: #d4d4d4;
  font-family: inherit;
  font-size: inherit;
  border: 1px solid #0f0f0f;
 }
-.header form td .button:hover {
+.header > form td .button:hover {
  background-color: #e6e6e6;
 }
 #submit {
  padding: 1px 0;
  margin-left: 2px;
 }
-.header form textarea {
+.header > form textarea {
  font-family: inherit;
  font-size: inherit;
  width: 380px;
@@ -112,10 +111,7 @@ img {
  padding: 2.5px 0 2px;
  margin-right: 2px;
 }
-#upload .d2 {
- left: 5px;
-}
-.header form td input[type="file"] {
+.header > form td input[type="file"] {
  display: none;
 }
 .post {
@@ -134,6 +130,12 @@ img {
 .name > a {
  color: #bd133e;
 }
+.name > .verif {
+ color: #00ba61;
+}
+.name > .unverif {
+ color: #bd133e;
+}
 .date {
  color: #444;
 }
@@ -141,7 +143,7 @@ img {
  color: #555;
  font-size: 12px;
 }
-.imageinfo a {
+.imageinfo > a {
  color: inherit;
  text-decoration: underline;
 }

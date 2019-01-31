@@ -28,6 +28,13 @@ func init_(conn *sqlite3.Conn, boards []config.Board) error {
 	if err != nil {
 		return err
 	}
+	err = conn.Exec("CREATE TABLE IF NOT EXISTS trips(" +
+		"name TEXT PRIMARY KEY," +
+		"salt BLOB NOT NULL," +
+		"hash BLOB) WITHOUT ROWID")
+	if err != nil {
+		return err
+	}
 	for _, b := range boards {
 		Boards[b.Name] = b.Title
 		err = conn.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s_posts("+
@@ -36,6 +43,7 @@ func init_(conn *sqlite3.Conn, boards []config.Board) error {
 			"ip TEXT NOT NULL,"+
 			"date DATE NOT NULL,"+
 			"name TEXT,"+
+			"tripcode TEXT,"+
 			"email TEXT,"+
 			"subject TEXT,"+
 			"comment TEXT,"+
@@ -130,10 +138,10 @@ func getConn() (*sqlite3.Conn, func(*sqlite3.Conn), error) {
 }
 
 func enter(board string) (*sqlite3.Conn, func(*sqlite3.Conn), error) {
+	// in theory an sql injection might still be possible if the config has
+	// an exceptionally stupid board name like "; DROP TABLES *; --" or
+	// something idk
 	if _, ok := Boards[board]; !ok {
-		// in theory an sql injection might still be possible if the
-		// config has an exceptionally stupid board name like "; DROP
-		// TABLES *; --" or something idk
 		return nil, nil, BoardNotFound(board)
 	}
 	return getConn()
@@ -149,14 +157,16 @@ type ImageAttr struct {
 }
 
 type Post struct {
-	Id      int64
-	Op      int64
-	Date    string
-	Name    string
-	Email   string
-	Subject string
-	Comment template.HTML
-	Image   *ImageAttr // pointer to avoid marshalling when nil... should consider alternatives
+	Id       int64
+	Op       int64
+	Date     string
+	Name     string
+	Tripcode string
+	Verified bool
+	Email    string
+	Subject  string
+	Comment  template.HTML
+	Image    *ImageAttr // pointer to avoid marshalling with nil. is it worth it?
 }
 
 func scanPost(postStmt, imgStmt *sqlite3.Stmt) (*Post, error) {
@@ -169,6 +179,7 @@ func scanPost(postStmt, imgStmt *sqlite3.Stmt) (*Post, error) {
 		nil,
 		&post.Date,
 		&post.Name,
+		&post.Tripcode,
 		&post.Email,
 		&post.Subject,
 		&comment,
@@ -203,6 +214,9 @@ imgDeleted:
 	if post.Name == "" {
 		post.Name = "Anonymous"
 	}
+	if post.Tripcode != "" {
+		post.Verified = post.Tripcode[0] == '!'
+	}
 	post.Comment = template.HTML(comment)
 	return post, nil
 }
@@ -219,8 +233,8 @@ func GetBoard(board string) ([]Preview, error) {
 	}
 	defer exit(conn)
 
-	/* i assume there's a better way that reduces the number of trips to
-	 * the db but i know basically nothing about sql (: */
+	// i assume there's a better way that reduces the number of trips to
+	// the db but i know basically nothing about sql (:
 	opStmt, err := conn.Prepare(fmt.Sprintf("SELECT id FROM %s_ops "+
 		"ORDER BY bumped DESC LIMIT 10",
 		board))
@@ -339,6 +353,7 @@ func GetThread(board string, op int64) ([]*Post, error) {
 // sqlite_bind_* functions and i don't feel like forking the package
 type Request struct {
 	Name      interface{}
+	Tripcode  interface{}
 	Email     interface{}
 	Subject   interface{}
 	Comment   interface{}
@@ -370,30 +385,38 @@ func Submit(board string, op int64, ip string, req *Request) error {
 		}
 	}
 
-	req.Comment, err = parse(conn, board, req.Comment, op)
-	if err != nil {
-		return err
+	if req.Name != nil {
+		req.Name, req.Tripcode, err = tripcode(conn, req.Name.(string))
+		if err != nil {
+			return err
+		}
+	}
+	if req.Comment != nil {
+		req.Comment, err = parse(conn, board, req.Comment.(string), op)
+		if err != nil {
+			return err
+		}
+	}
+	if req.Image == nil {
+		return conn.Exec(fmt.Sprintf("INSERT INTO %s_posts VALUES("+
+			"NULL, %d, '%s', datetime('now'), "+
+			"?, ?, ?, ?, ?, "+
+			"?, ?, ?)",
+			board, op, ip),
+			req.Name, req.Tripcode, req.Email, req.Subject, req.Comment,
+			nil, nil, nil)
 	}
 	return conn.WithTx(func() error {
-		if req.Image == nil {
-			return conn.Exec(fmt.Sprintf("INSERT INTO %s_posts VALUES("+
-				"NULL, %d, '%s', datetime('now'), "+
-				"?, ?, ?, ?, "+
-				"?, ?, ?)",
-				board, op, ip),
-				req.Name, req.Email, req.Subject, req.Comment,
-				nil, nil, nil)
-		}
 		uri, err := submitImage(conn, req.Image)
 		if err != nil {
 			return err
 		}
 		return conn.Exec(fmt.Sprintf("INSERT INTO %s_posts VALUES("+
 			"NULL, %d, '%s', datetime('now'), "+
-			"?, ?, ?, ?, "+
+			"?, ?, ?, ?, ?, "+
 			"?, ?, ?)",
 			board, op, ip),
-			req.Name, req.Email, req.Subject, req.Comment,
+			req.Name, req.Tripcode, req.Email, req.Subject, req.Comment,
 			req.ImageName, req.ImageAlt, uri)
 	})
 }

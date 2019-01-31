@@ -13,22 +13,22 @@ const board = `<!DOCTYPE html>
   <h1 id="title">/{{.Board}}/ - {{.Title}}</h1>
   <form action="/{{.Board}}/submit" method="POST" enctype="multipart/form-data">
    <table>
-    <tr><th><span class="d2">name</span></th><td><input type="text" name="name"></td></tr>
-    <tr><th><span class="d2">email</span></th><td><input type="text" name="email"></td></tr>
-    <tr><th><span class="d2">subject</span></th>
+    <tr><th>name</th><td><input type="text" name="name"></td></tr>
+    <tr><th>email</th><td><input type="text" name="email"></td></tr>
+    <tr><th>subject</th>
      <td>
       <input type="text" name="subject" style="width: 316px"><button id="submit"
-      class="button" style="width: 62px"><span class="d2" style="right: 1px">submit</span></button>
+      class="button" style="width: 62px"><span class="rel" style="right: 1px">submit</span></button>
      </td>
     </tr>
-    <tr><th><span class="d2">comment</span></th>
+    <tr><th>comment</th>
      <td><textarea name="comment" rows="6"></textarea></td>
     </tr>
-    <tr><th><span class="d2">image</span></th>
+    <tr><th>image</th>
      <td>
       <label id="upload" class="button" style="width: 62px">
        <input type="file" name="image" accept=".gif,.jpg,.jpeg,.png,image/gif,image/jpeg,image/png">
-       <span class="d2">browse</span>
+       <span class="rel" style="left: 5px">browse</span>
       </label><input type="text" name="alt" style="width: 314px">
      <td>
     </tr>
@@ -48,6 +48,14 @@ const board = `<!DOCTYPE html>
       <a href="mailto:{{.Op.Email}}">{{.Op.Name}}</a>
       {{- else -}}
       {{.Op.Name}}
+      {{- end -}}
+      {{- if .Op.Tripcode -}}
+      {{- if .Op.Verified -}}
+      <span class="verif">
+      {{- else -}}
+      <span class="unverif">
+      {{- end -}}
+      {{.Op.Tripcode}}</span>
       {{- end -}}
      </span>
      <span class="date">{{.Op.Date}}</span>
@@ -83,6 +91,14 @@ const board = `<!DOCTYPE html>
       <a href="mailto:{{.Email}}">{{.Name}}</a>
       {{- else -}}
       {{.Name}}
+      {{- end -}}
+      {{- if .Tripcode -}}
+      {{- if .Verified -}}
+      <span class="verif">
+      {{- else -}}
+      <span class="unverif">
+      {{- end -}}
+      {{.Tripcode}}</span>
       {{- end -}}
      </span>
      <span class="date">{{.Date}}</span>

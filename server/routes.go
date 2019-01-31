@@ -25,6 +25,6 @@ func initRoutes(mux *chi.Mux) {
 	mux.Get("/robots.txt", static.Robots)
 	mux.Get("/favicon.ico", static.Favicon)
 
-	mux.NotFound(error_(http.StatusNotFound))
+	mux.NotFound(error404)
 	mux.MethodNotAllowed(error_(http.StatusMethodNotAllowed))
 }

@@ -291,7 +291,7 @@ func (p *parser) node() node {
 	panic("unreachable")
 }
 
-func foldTerms(ast []node) []node {
+func trimTerms(ast []node) []node {
 	i := len(ast) - 1
 	for ; i >= 0; i-- {
 		if _, ok := ast[i].(term); !ok {
@@ -306,7 +306,7 @@ func (p *parser) parse() []node {
 	for p.idx < len(p.toks)-1 {
 		ast = append(ast, p.node())
 	}
-	return foldTerms(ast)
+	return trimTerms(ast)
 }
 
 func emitIdRef(conn *sqlite3.Conn, board string, op int64, sb *strings.Builder, ref string) error {
@@ -350,23 +350,20 @@ func emitIdRef(conn *sqlite3.Conn, board string, op int64, sb *strings.Builder, 
 	return nil
 }
 
-func emit(conn *sqlite3.Conn, board string, op int64, ast []node) (string, error) {
-	sb := new(strings.Builder)
+func emit(conn *sqlite3.Conn, board string, op int64, sb *strings.Builder, ast []node) error {
 	for _, n := range ast {
 		switch n := n.(type) {
 		case text:
 			sb.WriteString(html.EscapeString(string(n)))
 		case greenText:
 			sb.WriteString("<span class=\"gt\">&gt;")
-			if sub, err := emit(conn, board, op, n); err != nil {
-				return "", err
-			} else {
-				sb.WriteString(sub)
+			if err := emit(conn, board, op, sb, n); err != nil {
+				return err
 			}
 			sb.WriteString("</span><br>")
 		case idRef:
 			if err := emitIdRef(conn, board, op, sb, string(n)); err != nil {
-				return "", err
+				return err
 			}
 		case code:
 			if len(n) > 0 {
@@ -384,18 +381,13 @@ func emit(conn *sqlite3.Conn, board string, op int64, ast []node) (string, error
 			sb.WriteString("<br>")
 		}
 	}
-	return sb.String(), nil
+	return nil
 }
 
-func parse(conn *sqlite3.Conn, board string, comm interface{}, op int64) (interface{}, error) {
-	comm_, ok := comm.(string)
-	if !ok {
-		if comm != nil {
-			panic("wait what the fuck?")
-		}
-		return nil, nil
-	}
-	l := &lexer{input: []rune(comm_)}
+func parse(conn *sqlite3.Conn, board string, comm string, op int64) (string, error) {
+	l := &lexer{input: []rune(comm)}
 	p := &parser{toks: l.lex()}
-	return emit(conn, board, op, p.parse())
+	sb := new(strings.Builder)
+	err := emit(conn, board, op, sb, p.parse())
+	return sb.String(), err
 }

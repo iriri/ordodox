@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
@@ -119,6 +120,10 @@ func error_(code int) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
+var error400 = error_(http.StatusBadRequest)
+
+var error404 = error_(http.StatusNotFound)
+
 func writeJson(w http.ResponseWriter, v interface{}) {
 	j, err := json.Marshal(v)
 	if err != nil {
@@ -132,7 +137,7 @@ func writeJson(w http.ResponseWriter, v interface{}) {
 func redirect(w http.ResponseWriter, r *http.Request) {
 	b := chi.URLParam(r, "b")
 	if _, ok := database.Boards[b]; !ok {
-		error_(http.StatusNotFound)(w, r)
+		error404(w, r)
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/%s/", b), http.StatusFound)
@@ -143,7 +148,7 @@ func board(isJson bool) func(http.ResponseWriter, *http.Request) {
 		b := chi.URLParam(r, "b")
 		previews, err := database.GetBoard(b)
 		if err != nil {
-			error_(http.StatusNotFound)(w, r)
+			error404(w, r)
 			return
 		}
 		if isJson {
@@ -168,12 +173,12 @@ func thread(isJson bool) func(http.ResponseWriter, *http.Request) {
 		t := chi.URLParam(r, "t")
 		op, err := strconv.ParseInt(t, 10, 64)
 		if err != nil {
-			error_(http.StatusNotFound)(w, r)
+			error404(w, r)
 			return
 		}
 		posts, err := database.GetThread(b, op)
 		if err != nil {
-			error_(http.StatusNotFound)(w, r)
+			error404(w, r)
 			return
 		}
 		if isJson {
@@ -204,7 +209,7 @@ func image(w http.ResponseWriter, r *http.Request) {
 	uri := chi.URLParam(r, "i")
 	img, err := database.GetImage(uri)
 	if err != nil {
-		error_(http.StatusNotFound)(w, r)
+		error404(w, r)
 		return
 	}
 	w.Header().Set("Content-Type", "image/"+denormalizeSuffix(uri[65:]))
@@ -215,7 +220,7 @@ func thumb(w http.ResponseWriter, r *http.Request) {
 	uri := chi.URLParam(r, "t")
 	img, err := database.GetThumb(uri)
 	if err != nil {
-		error_(http.StatusNotFound)(w, r)
+		error404(w, r)
 		return
 	}
 	w.Header().Set("Content-Type", "image/jpeg")
@@ -273,35 +278,35 @@ func field(form *multipart.Reader, name string, l int) ([]byte, string, error) {
 	if part.FormName() != name {
 		return nil, "", unexpectedField(name)
 	}
-	b, err := ioutil.ReadAll(&limitReader{part, l})
+	buf, err := ioutil.ReadAll(&limitReader{part, l})
 	if err != nil {
 		if err == io.ErrShortBuffer {
 			return nil, "", fieldTooLong{name, l}
 		}
 		return nil, "", err
 	}
-	return b, part.FileName(), nil
+	return buf, part.FileName(), nil
 }
 
 func parseText(form *multipart.Reader, name string, l int) (interface{}, error) {
-	b, _, err := field(form, name, l)
-	if len(b) == 0 {
+	buf, _, err := field(form, name, l)
+	if len(buf) == 0 {
 		return nil, err
 	}
-	return string(b), nil
+	return *(*string)(unsafe.Pointer(&buf)), nil
 }
 
 var imageTypes = regexp.MustCompile("image/(gif|jpeg|png)")
 
 func parseImage(form *multipart.Reader, name string, l int) ([]byte, string, error) {
-	b, fname, err := field(form, name, l)
-	if len(b) == 0 {
+	img, fname, err := field(form, name, l)
+	if len(img) == 0 {
 		return nil, "", err
 	}
-	if typ := http.DetectContentType(b); !imageTypes.MatchString(typ) {
+	if typ := http.DetectContentType(img); !imageTypes.MatchString(typ) {
 		return nil, "", unsupportedMimetype{name, typ}
 	}
-	return b, fname, nil
+	return img, fname, nil
 }
 
 func parseMulti(w http.ResponseWriter, r *http.Request) (*database.Request, error) {
@@ -348,7 +353,7 @@ func submit_(w http.ResponseWriter, r *http.Request, b string, op int64) {
 		body, err = ioutil.ReadAll(&limitReader{r.Body, 0x400000})
 		if err != nil {
 			logger.Printf("error reading request: %v", err)
-			error_(http.StatusBadRequest)(w, r)
+			error400(w, r)
 			return
 		}
 		req = new(database.Request)
@@ -358,14 +363,14 @@ func submit_(w http.ResponseWriter, r *http.Request, b string, op int64) {
 	}
 	if err != nil {
 		logger.Printf("error parsing request: %v", err)
-		error_(http.StatusBadRequest)(w, r)
+		error400(w, r)
 		return
 	}
 	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
 	if err = database.Submit(b, op, ip, req); err != nil {
 		// TODO: handle different error types
 		logger.Printf("error submitting request: %v", err)
-		error_(http.StatusBadRequest)(w, r)
+		error400(w, r)
 		return
 	}
 	if json_ {
@@ -383,12 +388,12 @@ func submit(w http.ResponseWriter, r *http.Request) {
 func reply(w http.ResponseWriter, r *http.Request) {
 	t := chi.URLParam(r, "t")
 	if t == "" {
-		error_(http.StatusBadRequest)(w, r)
+		error400(w, r)
 		return
 	}
 	op, err := strconv.ParseInt(t, 10, 64)
 	if err != nil {
-		error_(http.StatusNotFound)(w, r)
+		error404(w, r)
 		return
 	}
 	submit_(w, r, chi.URLParam(r, "b"), op)
