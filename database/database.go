@@ -109,19 +109,28 @@ func Init(opt *config.Opt) error {
 type BoardNotFound string
 
 func (b BoardNotFound) Error() string {
-	return fmt.Sprintf("Board not found: %s", string(b))
+	return fmt.Sprintf("board not found: %s", string(b))
+}
+
+type PageNotFound struct {
+	board string
+	page  int64
+}
+
+func (p PageNotFound) Error() string {
+	return fmt.Sprintf("page %d does not exist on board %s", p.page, p.board)
 }
 
 type OpNotFound int64
 
 func (op OpNotFound) Error() string {
-	return fmt.Sprintf("Op not found: %d", int64(op))
+	return fmt.Sprintf("op not found: %d", int64(op))
 }
 
 type IdNotFound int64
 
 func (id IdNotFound) Error() string {
-	return fmt.Sprintf("Post not found: %d", int64(id))
+	return fmt.Sprintf("post not found: %d", int64(id))
 }
 
 func getConn() (*sqlite3.Conn, func(*sqlite3.Conn), error) {
@@ -215,7 +224,7 @@ imgDeleted:
 		post.Name = "Anonymous"
 	}
 	if post.Tripcode != "" {
-		post.Verified = post.Tripcode[0] == '!'
+		post.Verified = post.Tripcode[0] == '#'
 	}
 	post.Comment = template.HTML(comment)
 	return post, nil
@@ -226,20 +235,57 @@ type Preview struct {
 	Replies []*Post
 }
 
-func GetBoard(board string) ([]Preview, error) {
+func getPages(conn *sqlite3.Conn, board string, page int64) (int64, error) {
+	pagesStmt, err := conn.Prepare(fmt.Sprintf("SELECT COUNT(*) FROM %s_ops", board))
+	if err != nil {
+		return 0, err
+	}
+	defer pagesStmt.Close()
+	if ok, err := pagesStmt.Step(); err != nil {
+		return 0, err
+	} else if !ok {
+		panic("what")
+	}
+	var ops int64
+	if err = pagesStmt.Scan(&ops); err != nil {
+		return 0, err
+	}
+	pages := (ops + 9) / 10
+	if page >= pages {
+		if pages > 0 {
+			return 0, PageNotFound{board, page}
+		}
+		pages = 1
+	}
+	return pages, nil
+}
+
+func enumerate(n int64) []int64 {
+	sl := make([]int64, n)
+	for i := int64(0); i < n; i++ {
+		sl[i] = i
+	}
+	return sl
+}
+
+func GetBoard(board string, page int64) ([]Preview, []int64, error) {
 	conn, exit, err := enter(board)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer exit(conn)
+	pages, err := getPages(conn, board, page)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	// i assume there's a better way that reduces the number of trips to
 	// the db but i know basically nothing about sql (:
 	opStmt, err := conn.Prepare(fmt.Sprintf("SELECT id FROM %s_ops "+
-		"ORDER BY bumped DESC LIMIT 10",
-		board))
+		"ORDER BY bumped DESC LIMIT %d,10",
+		board, page*10))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer opStmt.Close()
 	postStmt, err := conn.Prepare(fmt.Sprintf("SELECT * FROM %s_posts "+
@@ -248,61 +294,58 @@ func GetBoard(board string) ([]Preview, error) {
 		"(SELECT * FROM %s_posts WHERE op = ? "+
 		"ORDER BY id DESC LIMIT 3)", board, board))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer postStmt.Close()
 	imgStmt, err := conn.Prepare("SELECT size, width, height FROM images WHERE uri = ?")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer imgStmt.Close()
 
 	threads := make([]Preview, 0, 10)
 	for {
 		if ok, err := opStmt.Step(); err != nil {
-			return nil, err
+			return nil, nil, err
 		} else if !ok {
 			break
 		}
 
 		var op int64
-		err = opStmt.Scan(&op)
-		if err != nil {
-			return nil, err
+		if err = opStmt.Scan(&op); err != nil {
+			return nil, nil, err
 		}
 		if err = postStmt.Bind(op, op); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		var prv Preview
 		if ok, err := postStmt.Step(); err != nil {
-			return nil, err
+			return nil, nil, err
 		} else if !ok {
 			continue // ???
 		}
-		post, err := scanPost(postStmt, imgStmt)
-		if err != nil {
-			return nil, err
+		if prv.Op, err = scanPost(postStmt, imgStmt); err != nil {
+			return nil, nil, err
 		}
-		prv.Op = post
 		for {
 			if ok, err := postStmt.Step(); err != nil {
-				return nil, err
+				return nil, nil, err
 			} else if !ok {
 				break
 			}
 
 			post, err := scanPost(postStmt, imgStmt)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			prv.Replies = append(prv.Replies, post)
 		}
 		if err = postStmt.Reset(); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		threads = append(threads, prv)
 	}
-	return threads, nil
+	return threads, enumerate(pages), nil
 }
 
 func GetThread(board string, op int64) ([]*Post, error) {

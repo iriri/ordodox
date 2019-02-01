@@ -61,7 +61,7 @@ img {
 .rel {
  position: relative;
 }
-.header {
+header {
  display: inline-block;
  margin: 0 0 5px 8px;
 }
@@ -69,36 +69,36 @@ img {
  text-align: center;
  padding: 5px 0 0;
 }
-.header > form table {
+header > form table {
  border-collapse: separate;
  border-spacing: 2px;
 }
-.header > form th {
+header > form th {
  background-color: #d4d4d4;
  text-align: left;
  padding: 0 4px 0;
  vertical-align: middle;
 }
-.header > form input {
+header > form input {
  font-family: inherit;
  font-size: inherit;
  width: 380px;
  border: 1px solid #0f0f0f;
 }
-.header > form .button {
+header > form .button {
  background-color: #d4d4d4;
  font-family: inherit;
  font-size: inherit;
  border: 1px solid #0f0f0f;
 }
-.header > form td .button:hover {
+header > form td .button:hover {
  background-color: #e6e6e6;
 }
 #submit {
  padding: 1px 0;
  margin-left: 2px;
 }
-.header > form textarea {
+header > form textarea {
  font-family: inherit;
  font-size: inherit;
  width: 380px;
@@ -111,7 +111,7 @@ img {
  padding: 2.5px 0 2px;
  margin-right: 2px;
 }
-.header > form td input[type="file"] {
+header > form td input[type="file"] {
  display: none;
 }
 .post {
@@ -157,9 +157,35 @@ img {
 .gt {
  color: #00ba61;
 }
+pre, code {
+ background-color: #fafafa;
+ font-family: Lucida Sans Typewriter, Courier New, monospace;
+}
+pre {
+ padding: 5px;
+ margin: 5px;
+}
+code {
+ padding: 0 2px;
+}
 .thread {
  margin-bottom: 5px;
 }
 .reply {
  margin-left: 25px;
+}
+footer {
+ display: inline-block;
+ background-color: #d4d4d4;
+ padding: 10px;
+ margin: 5px 10px 0;
+}
+footer ul, footer li{
+ display: inline;
+}
+footer li {
+ margin: 0 1px;
+}
+footer li > a {
+ color: #0b90bd;
 }`)

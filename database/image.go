@@ -48,13 +48,11 @@ func makeThumb(input image.Image, size image.Point) ([]byte, error) {
 		return nil, errors.New("greyscale or something? idk deal with this later")
 	}
 
-	err := rez.Convert(output, input, rez.NewBilinearFilter())
-	if err != nil {
+	if err := rez.Convert(output, input, rez.NewBilinearFilter()); err != nil {
 		return nil, err
 	}
 	buf := new(bytes.Buffer)
-	err = jpeg.Encode(buf, output, &jpeg.Options{Quality: 90})
-	if err != nil {
+	if err := jpeg.Encode(buf, output, &jpeg.Options{Quality: 90}); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
@@ -97,8 +95,7 @@ func submitImage(conn *sqlite3.Conn, input []byte) (string, error) {
 		return "", err
 	}
 	defer insertStmt.Close()
-	err = insertStmt.Bind(input, thumb)
-	if err != nil {
+	if err = insertStmt.Bind(input, thumb); err != nil {
 		return "", err
 	}
 	if _, err := insertStmt.Step(); err != nil {
@@ -110,7 +107,7 @@ func submitImage(conn *sqlite3.Conn, input []byte) (string, error) {
 type ImageNotFound string
 
 func (uri ImageNotFound) Error() string {
-	return fmt.Sprintf("Image not found: %s", uri)
+	return fmt.Sprintf("image not found: %s", uri)
 }
 
 func getImage(uri, kind string) ([]byte, error) {
@@ -125,8 +122,7 @@ func getImage(uri, kind string) ([]byte, error) {
 		return nil, err
 	}
 	defer stmt.Close()
-	err = stmt.Bind(uri)
-	if err != nil {
+	if err = stmt.Bind(uri); err != nil {
 		return nil, err
 	}
 	if ok, err := stmt.Step(); err != nil {

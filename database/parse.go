@@ -56,15 +56,19 @@ func (l *lexer) gt() token {
 }
 
 func (l *lexer) grv() token {
-	if l.input[l.idx+1] != '`' {
-		return token{typ: grv}
-	}
-	if l.idx+2 < len(l.input) && l.input[l.idx+2] == '`' {
+	if l.idx+2 < len(l.input) && l.input[l.idx+1] == '`' && l.input[l.idx+2] == '`' {
 		l.idx += 2
 		return token{typ: grvgrvgrv}
 	}
-	l.idx++
 	return token{typ: grv}
+}
+
+func (l *lexer) cr() token {
+	if l.input[l.idx+1] == '\n' {
+		l.idx++
+		return token{typ: eol}
+	}
+	return token{typ: str}
 }
 
 func (l *lexer) str() token {
@@ -73,6 +77,7 @@ func (l *lexer) str() token {
 		if l.input[l.idx] == '\\' ||
 			l.input[l.idx] == '>' ||
 			l.input[l.idx] == '`' ||
+			l.input[l.idx] == '\r' ||
 			l.input[l.idx] == '\n' {
 			break
 		}
@@ -93,6 +98,8 @@ func (l *lexer) token() token {
 		tok = l.gt()
 	case '`':
 		tok = l.grv()
+	case '\r':
+		tok = l.cr()
 	case '\n':
 		tok = token{typ: eol}
 	default:
@@ -160,6 +167,13 @@ func (p *parser) shift() token {
 	return tok
 }
 
+func (p *parser) next() token {
+	if p.idx >= len(p.toks) {
+		return token{typ: eof}
+	}
+	return p.toks[p.idx]
+}
+
 func (p *parser) escaped() node {
 	switch tok := p.shift(); tok.typ {
 	case str:
@@ -184,7 +198,7 @@ func (p *parser) escaped() node {
 
 func (p *parser) greenText() node {
 	sub := make([]node, 0, 8)
-	for p.idx < len(p.toks) {
+	for {
 		switch tok := p.shift(); tok.typ {
 		case str:
 			sub = append(sub, text(tok.val))
@@ -205,15 +219,17 @@ func (p *parser) greenText() node {
 			p.idx--
 			fallthrough
 		case eol, eof:
+			if p.next().typ != grvgrvgrv {
+				sub = append(sub, term{})
+			}
 			return greenText(sub)
 		}
 	}
-	return greenText(sub)
 }
 
 func (p *parser) code() node {
 	sb := new(strings.Builder)
-	for p.idx < len(p.toks) {
+	for {
 		switch tok := p.shift(); tok.typ {
 		case str:
 			for _, r := range tok.val {
@@ -236,12 +252,11 @@ func (p *parser) code() node {
 			return code(sb.String())
 		}
 	}
-	return code(sb.String())
 }
 
 func (p *parser) blockCode() node {
 	sb := new(strings.Builder)
-	for p.idx < len(p.toks) {
+	for {
 		switch tok := p.shift(); tok.typ {
 		case str:
 			for _, r := range tok.val {
@@ -263,10 +278,12 @@ func (p *parser) blockCode() node {
 		case eol:
 			sb.WriteString("\n")
 		case grvgrvgrv, eof:
+			if p.next().typ == eol {
+				p.idx++
+			}
 			return blockCode(sb.String())
 		}
 	}
-	return blockCode(sb.String())
 }
 
 func (p *parser) node() node {
@@ -284,9 +301,12 @@ func (p *parser) node() node {
 	case grvgrvgrv:
 		return p.blockCode()
 	case eol:
+		if p.next().typ == grvgrvgrv {
+			p.idx++
+			return p.blockCode()
+		}
 		return term{}
 	case eof:
-		// return term{}
 	}
 	panic("unreachable")
 }
@@ -330,8 +350,7 @@ func emitIdRef(conn *sqlite3.Conn, board string, op int64, sb *strings.Builder, 
 		return nil
 	}
 	var op_ int64
-	err = stmt.Scan(&op_)
-	if err != nil {
+	if err = stmt.Scan(&op_); err != nil {
 		return err
 	}
 
@@ -360,22 +379,22 @@ func emit(conn *sqlite3.Conn, board string, op int64, sb *strings.Builder, ast [
 			if err := emit(conn, board, op, sb, n); err != nil {
 				return err
 			}
-			sb.WriteString("</span><br>")
+			sb.WriteString("</span>")
 		case idRef:
 			if err := emitIdRef(conn, board, op, sb, string(n)); err != nil {
 				return err
 			}
 		case code:
 			if len(n) > 0 {
-				sb.WriteString("<pre>")
+				sb.WriteString("<code>")
 				sb.WriteString(html.EscapeString(string(n)))
-				sb.WriteString("</pre>")
+				sb.WriteString("</code>")
 			}
 		case blockCode:
 			if len(n) > 0 {
-				sb.WriteString("<div class=\"block\"><pre>")
+				sb.WriteString("<pre>")
 				sb.WriteString(html.EscapeString(string(n)))
-				sb.WriteString("</pre></div>")
+				sb.WriteString("</pre>")
 			}
 		case term:
 			sb.WriteString("<br>")

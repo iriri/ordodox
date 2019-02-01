@@ -69,16 +69,13 @@ func getSalt(conn *sqlite3.Conn, name string) ([]byte, []byte, error) {
 func expensiveBlowfishSetup(key string, salt []byte) (*blowfish.Cipher, error) {
 	key_ := make([]byte, len(key))
 	copy(key_, key)
-	salt_ := make([]byte, len(salt))
-	copy(salt_, salt)
-	c, err := blowfish.NewSaltedCipher(key_, salt_)
+	c, err := blowfish.NewSaltedCipher(key_, salt)
 	if err != nil {
 		return nil, err
 	}
-
 	for i := 0; i < 1<<12; i++ {
 		blowfish.ExpandKey(key_, c)
-		blowfish.ExpandKey(salt_, c)
+		blowfish.ExpandKey(salt, c)
 	}
 	return c, nil
 }
@@ -106,7 +103,7 @@ var bcEncoding = base64.NewEncoding(alphabet)
 func encode(hash []byte, match bool) string {
 	enc := make([]byte, 13)
 	if match {
-		enc[0] = '!'
+		enc[0] = '#'
 	} else {
 		enc[0] = '?'
 	}
@@ -114,7 +111,7 @@ func encode(hash []byte, match bool) string {
 	return *(*string)(unsafe.Pointer(&enc))
 }
 
-var alreadyUpdated = errors.New("Row was already updated")
+var errAlreadyUpdated = errors.New("row was already updated")
 
 func tripcode(conn *sqlite3.Conn, name string) (string, interface{}, error) {
 	parts := strings.SplitN(name, "#", 2)
@@ -144,6 +141,7 @@ func tripcode(conn *sqlite3.Conn, name string) (string, interface{}, error) {
 		if err != nil {
 			return err
 		}
+		defer stmt.Close()
 		if ok, err := stmt.Step(); err != nil {
 			return err
 		} else if !ok {
@@ -156,7 +154,7 @@ func tripcode(conn *sqlite3.Conn, name string) (string, interface{}, error) {
 		}
 		switch changes {
 		case 0:
-			return alreadyUpdated
+			return errAlreadyUpdated
 		case 1:
 			return nil
 		default:
@@ -165,7 +163,7 @@ func tripcode(conn *sqlite3.Conn, name string) (string, interface{}, error) {
 	})
 	if err == nil {
 		return parts[0], encode(hashed, true), nil
-	} else if err != alreadyUpdated {
+	} else if err != errAlreadyUpdated {
 		return "", nil, err
 	}
 	if _, hash, err = getDbSalt(conn, parts[0]); err != nil {

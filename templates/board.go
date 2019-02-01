@@ -9,7 +9,7 @@ const board = `<!DOCTYPE html>
  <title>/{{.Board}}/</title>
 </head>
 <body>
- <div class="header">
+ <header>
   <h1 id="title">/{{.Board}}/ - {{.Title}}</h1>
   <form action="/{{.Board}}/submit" method="POST" enctype="multipart/form-data">
    <table>
@@ -22,19 +22,20 @@ const board = `<!DOCTYPE html>
      </td>
     </tr>
     <tr><th>comment</th>
-     <td><textarea name="comment" rows="6"></textarea></td>
+     <td><textarea name="comment" rows="6" placeholder="formatting&#10; >greentext, >>reference&#10; ` +
+	"`code`, ```code block```" + `&#10; \escaped"></textarea></td>
     </tr>
     <tr><th>image</th>
      <td>
       <label id="upload" class="button" style="width: 62px">
        <input type="file" name="image" accept=".gif,.jpg,.jpeg,.png,image/gif,image/jpeg,image/png">
        <span class="rel" style="left: 5px">browse</span>
-      </label><input type="text" name="alt" style="width: 314px">
+      </label><input type="text" name="alt" style="width: 314px" placeholder="alt text">
      <td>
     </tr>
    </table>
   </form>
- </div>
+ </header>
  {{range .Previews -}}
  <div class="thread">
   <div>
@@ -60,7 +61,7 @@ const board = `<!DOCTYPE html>
      </span>
      <span class="date">{{.Op.Date}}</span>
      <span class="id">No. {{.Op.Id}}</span>
-     [<a href="{{.Op.Id}}">Reply</a>]
+     [<a href="/{{$.Board}}/{{.Op.Id}}">Reply</a>]
     {{if .Op.Image -}}
      <div class="imageinfo">
       <a href="/img/{{.Op.Image.Uri}}">{{.Op.Image.Name}}</a>
@@ -124,4 +125,13 @@ const board = `<!DOCTYPE html>
   {{- end}}
  </div>
  {{- end}}
+ <div>
+  <footer>
+   <ul>
+   {{range .Pages -}}
+   <li>[<a href="/{{$.Board}}/page/{{.}}">{{.}}</a>]</li>
+   {{- end}}
+   </ul>
+  </footer>
+ </div>
 </body>`

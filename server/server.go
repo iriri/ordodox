@@ -146,7 +146,22 @@ func redirect(w http.ResponseWriter, r *http.Request) {
 func board(isJson bool) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		b := chi.URLParam(r, "b")
-		previews, err := database.GetBoard(b)
+		p := chi.URLParam(r, "p")
+		var page int64
+		if p == "" {
+			page = 0
+		} else {
+			var err error
+			if page, err = strconv.ParseInt(p, 10, 64); err != nil {
+				error404(w, r)
+				return
+			}
+			if page < 0 {
+				error404(w, r)
+				return
+			}
+		}
+		previews, pages, err := database.GetBoard(b, page)
 		if err != nil {
 			error404(w, r)
 			return
@@ -158,8 +173,9 @@ func board(isJson bool) func(http.ResponseWriter, *http.Request) {
 			err = templates.Board(w, struct {
 				Board    string
 				Title    string
+				Pages    []int64
 				Previews []database.Preview
-			}{b, database.Boards[b], previews})
+			}{b, database.Boards[b], pages, previews})
 			if err != nil {
 				panic(err)
 			}
@@ -230,7 +246,7 @@ func thumb(w http.ResponseWriter, r *http.Request) {
 type unexpectedField string
 
 func (u unexpectedField) Error() string {
-	return fmt.Sprintf("Unexpected field: %s", string(u))
+	return fmt.Sprintf("unexpected field: %s", string(u))
 }
 
 type fieldTooLong struct {
@@ -239,13 +255,13 @@ type fieldTooLong struct {
 }
 
 func (f fieldTooLong) Error() string {
-	return fmt.Sprintf("Field %s exceeded maximum length %d", f.name, f.n)
+	return fmt.Sprintf("field %s exceeded maximum length %d", f.name, f.n)
 }
 
 type unsupportedMimetype struct{ name, typ string }
 
 func (u unsupportedMimetype) Error() string {
-	return fmt.Sprintf("Unsupported MIME type %s in field %s", u.typ, u.name)
+	return fmt.Sprintf("unsupported MIME type %s in field %s", u.typ, u.name)
 }
 
 type limitReader struct {
